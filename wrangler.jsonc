@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "game-friend-v2-website",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "routes": [
+    {
+      "pattern": "1288688.xyz",
+      "custom_domain": true
+    },
+    {
+      "pattern": "517751.xyz",
+      "custom_domain": true
+    }
+  ]
+}
