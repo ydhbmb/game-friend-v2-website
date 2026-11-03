@@ -13,13 +13,11 @@ export default function Navbar() {
   const [loading, setLoading] = useState(true)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   
-  // 用于点击外部关闭菜单
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     fetchUser()
     
-    // 监听点击事件，点击菜单外部关闭菜单
     function handleClickOutside(event: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setIsMenuOpen(false)
@@ -105,7 +103,7 @@ export default function Navbar() {
             <div className="relative ml-2 pl-4 border-l border-gray-700" ref={menuRef}>
               <div 
                 className="flex items-center gap-2 cursor-pointer select-none"
-                onClick={() => setIsMenuOpen(!isMenuOpen)} // 改为点击触发
+                onClick={() => setIsMenuOpen(!isMenuOpen)}
               >
                 <img src={userProfile.avatar_url || '/logo.png'} className="w-9 h-9 rounded-full object-cover border border-cyan-500 shadow-[0_0_10px_rgba(6,182,212,0.5)]" />
                 
@@ -116,13 +114,12 @@ export default function Navbar() {
                       Lv.{levelInfo.level}
                     </span>
                   </div>
-                  <span className="text-[10px] text-blue-400">
-                    {levelInfo.name} | 经验: {userProfile.experience || 0}
+                  <span className="text-[10px] text-blue-400 font-bold">
+                    {levelInfo.icon} {levelInfo.name}
                   </span>
                 </div>
               </div>
               
-              {/* 下拉菜单 */}
               {isMenuOpen && (
                 <div className="absolute top-full right-0 mt-2 w-36 bg-[#0A111F] border border-cyan-500/30 rounded-xl shadow-[0_0_20px_rgba(6,182,212,0.2)] py-2 overflow-hidden">
                   <Link href="/user-center" onClick={() => setIsMenuOpen(false)} className="block px-4 py-2 text-sm text-gray-300 hover:bg-cyan-500/20 hover:text-white transition">用户中心</Link>

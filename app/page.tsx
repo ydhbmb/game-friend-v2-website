@@ -186,7 +186,8 @@ export default function HomePage() {
                             <span className="text-[10px] bg-cyan-900/50 text-cyan-300 px-1.5 py-0.5 rounded border border-cyan-500/30 whitespace-nowrap">Lv.{lvl.level}</span>
                           </div>
                           <div className="flex items-center justify-between gap-1 mt-0.5">
-                            <p className="text-[10px] text-gray-400 font-mono truncate">{lvl.name}</p>
+                            {/* 这里加了图标 */}
+                            <p className="text-[10px] text-gray-400 font-mono truncate">{lvl.icon} {lvl.name}</p>
                             <p className="text-[10px] text-cyan-500 font-mono whitespace-nowrap">EXP: {user.experience}</p>
                           </div>
                         </div>
