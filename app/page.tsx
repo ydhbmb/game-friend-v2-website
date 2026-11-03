@@ -1,9 +1,5 @@
 'use client'
 
-export const dynamic = 'force-dynamic'; // 👈 强行加这一行，阻止云端预渲染
-
-import { useState, useEffect, useRef } from 'react'
-// ... 下面保持原样不变
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
@@ -37,9 +33,9 @@ export default function HomePage() {
         await fetchGames()
         await fetchLeaderboard()
       } catch (err) {
-        console.error("初始化数据报错（已拦截防卡死）:", err)
+        console.error("初始化数据报错:", err)
       } finally {
-        setLoading(false) // 无论成功失败，强制结束 Loading
+        setLoading(false)
       }
     }
     init()
@@ -257,7 +253,6 @@ export default function HomePage() {
         </main>
       </div>
 
-      {/* 弹窗部分不变，省略以保持简洁，保留你原有的弹窗即可 */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-[#050B14]/90 backdrop-blur-md flex items-center justify-center z-[100] p-4">
           <div className="bg-[#0A111F] border border-cyan-500/40 rounded-3xl p-8 w-full max-w-md shadow-[0_0_50px_rgba(6,182,212,0.2)]">
