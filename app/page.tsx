@@ -10,6 +10,7 @@ export default function HomePage() {
   const [userProfile, setUserProfile] = useState<any>(null)
   const [games, setGames] = useState<any[]>([])
   const [leaderboard, setLeaderboard] = useState<any[]>([]) 
+  const [followedGameIds, setFollowedGameIds] = useState<number[]>([]) // 记录关注的游戏
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   
@@ -34,7 +35,12 @@ export default function HomePage() {
         const { data: { user } } = await supabase.auth.getUser()
         if (user) {
           const { data } = await supabase.from('users_profile').select('*').eq('auth_id', user.id).single()
-          if (data) setUserProfile(data)
+          if (data) {
+            setUserProfile(data)
+            // 获取当前用户关注了哪些游戏
+            const { data: followsData } = await supabase.from('game_follows').select('game_id').eq('user_id', data.id)
+            if (followsData) setFollowedGameIds(followsData.map(f => f.game_id))
+          }
         }
         await fetchGames()
         await fetchLeaderboard()
@@ -67,6 +73,26 @@ export default function HomePage() {
     } catch (err) {}
   }
 
+  // 关注/取消关注游戏
+  async function toggleFollowGame(gameId: number, e: React.MouseEvent) {
+    e.preventDefault() // 阻止跳转到详情页
+    e.stopPropagation() // 阻止事件冒泡
+    if (!userProfile) return alert('请先登录！')
+
+    try {
+      const isFollowed = followedGameIds.includes(gameId)
+      if (isFollowed) {
+        await supabase.from('game_follows').delete().eq('user_id', userProfile.id).eq('game_id', gameId)
+        setFollowedGameIds(followedGameIds.filter(id => id !== gameId))
+      } else {
+        await supabase.from('game_follows').insert({ user_id: userProfile.id, game_id: gameId })
+        setFollowedGameIds([...followedGameIds, gameId])
+      }
+    } catch (err: any) {
+      alert('操作失败：' + err.message)
+    }
+  }
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setCoverFile(e.target.files[0])
@@ -97,7 +123,7 @@ export default function HomePage() {
     }
   }
 
-  // =============== 管理员操作：改名 & 删除 ===============
+  // 管理员操作：改名 & 删除
   async function handleUpdateName(gameId: number, oldName: string) {
     const newName = prompt('请输入新的游戏模块名称：', oldName)
     if (!newName || newName.trim() === '' || newName === oldName) return
@@ -236,8 +262,8 @@ export default function HomePage() {
                           <div className="absolute top-0 left-0 w-full h-[2px] bg-cyan-400/50 shadow-[0_0_15px_rgba(6,182,212,1)] -translate-y-full group-hover:animate-[scan_2s_ease-in-out_infinite]"></div>
                         </div>
                         
-                        <div className="p-5 relative bg-gradient-to-t from-[#0A111F] to-[#0A111F]/90">
-                          <div className="relative z-10">
+                        <div className="p-5 relative bg-gradient-to-t from-[#0A111F] to-[#0A111F]/90 flex justify-between items-end">
+                          <div className="relative z-10 flex-1 min-w-0 pr-2">
                             <h3 className="font-black text-xl text-white mb-1 group-hover:text-cyan-400 transition-colors tracking-wide truncate">{game.name}</h3>
                             <div className="text-xs text-gray-500 font-mono truncate flex items-center gap-1">
                               CREATOR: 
@@ -245,10 +271,24 @@ export default function HomePage() {
                               <span className="text-[9px] bg-yellow-500/20 text-yellow-400 border border-yellow-500/50 px-1.5 py-0.5 rounded shadow-[0_0_8px_rgba(250,204,21,0.4)]">⚡ 先锋</span>
                             </div>
                           </div>
+                          
+                          {/* 关注游戏按钮 */}
+                          {userProfile && (
+                            <button 
+                              onClick={(e) => toggleFollowGame(game.id, e)}
+                              className={`relative z-20 shrink-0 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all flex items-center gap-1 ${
+                                followedGameIds.includes(game.id) 
+                                  ? 'bg-cyan-900/40 text-cyan-400 border-cyan-500/50' 
+                                  : 'bg-transparent text-gray-500 border-gray-600 hover:text-cyan-400 hover:border-cyan-500/50'
+                              }`}
+                            >
+                              {followedGameIds.includes(game.id) ? '🔔 已关注' : '🔕 关注'}
+                            </button>
+                          )}
                         </div>
                       </Link>
 
-                      {/* 🔥 管理员专属操作面板 */}
+                      {/* 管理员专属操作面板 */}
                       {userProfile && isAdmin(userProfile.id) && (
                         <div className="absolute top-3 right-3 z-20 flex gap-1 opacity-0 group-hover:opacity-100 transition-all duration-300">
                           <button onClick={(e) => { e.preventDefault(); handleUpdateName(game.id, game.name); }} className="bg-black/80 backdrop-blur border border-yellow-500/50 text-yellow-400 text-xs px-2 py-1 rounded hover:bg-yellow-500/20" title="修改名称">✏️</button>
