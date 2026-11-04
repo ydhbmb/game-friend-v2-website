@@ -78,7 +78,6 @@ export default function Navbar() {
           <span className="text-cyan-500 text-xs animate-pulse">加载中...</span>
         ) : userProfile && levelInfo ? (
           <div className="flex items-center gap-1 md:gap-3 relative">
-            {/* 手机端把文字改成图标 */}
             <Link href="/messages" className="text-xs font-bold px-2 py-1.5 rounded-lg text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/20">
               <span className="hidden md:inline">消息</span><span className="md:hidden">✉️</span>
             </Link>
@@ -111,6 +110,11 @@ export default function Navbar() {
             </div>
           </div>
         ) : (
-         <a href="/login" className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-4 py-1.5 md:px-6 md:py-2 rounded-lg font-bold text-sm shadow-[0_0_15px_rgba(6,182,212,0.4)]">
-  登录
-</a>
+          <a href="/login" className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-4 py-1.5 md:px-6 md:py-2 rounded-lg font-bold text-sm shadow-[0_0_15px_rgba(6,182,212,0.4)]">
+            登录
+          </a>
+        )}
+      </div>
+    </nav>
+  )
+}
