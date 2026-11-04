@@ -13,7 +13,8 @@ function GameDetailContent() {
   const [game, setGame] = useState<any>(null)
   const [userProfile, setUserProfile] = useState<any>(null)
   const [recruits, setRecruits] = useState<any[]>([])
-  const [followedIds, setFollowedIds] = useState<number[]>([])
+  const [followedIds, setFollowedIds] = useState<number[]>([]) // 关注的人
+  const [isFollowingGame, setIsFollowingGame] = useState(false) // 关注游戏
   const [likedIds, setLikedIds] = useState<number[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -28,7 +29,6 @@ function GameDetailContent() {
   const [newComment, setNewComment] = useState('')
   const [commentLoading, setCommentLoading] = useState(false)
 
-  // 判断是否是最高权限管理员
   const isAdmin = (uid: number) => {
     const admins = [1, 10000, 11111, 22222, 33333, 44444, 55555, 66666, 77777, 88888, 99999]
     return admins.includes(uid)
@@ -42,10 +42,15 @@ function GameDetailContent() {
           const { data } = await supabase.from('users_profile').select('*').eq('auth_id', user.id).single()
           if (data) {
             setUserProfile(data)
+            // 获取关注的人
             const { data: followsData } = await supabase.from('follows').select('following_id').eq('follower_id', data.id)
             if (followsData) setFollowedIds(followsData.map(f => f.following_id))
+            // 获取点赞记录
             const { data: likesData } = await supabase.from('likes').select('recruit_id').eq('user_id', data.id)
             if (likesData) setLikedIds(likesData.map(l => l.recruit_id))
+            // 获取是否关注了游戏
+            const { data: gameFollowData } = await supabase.from('game_follows').select('id').eq('user_id', data.id).eq('game_id', gameId).single()
+            if (gameFollowData) setIsFollowingGame(true)
           }
         }
 
@@ -68,6 +73,22 @@ function GameDetailContent() {
       .eq('game_id', gameId)
       .order('created_at', { ascending: false }) 
     if (data) setRecruits(data)
+  }
+
+  // 关注游戏逻辑
+  async function toggleFollowGame() {
+    if (!userProfile) return alert('请先登录！')
+    try {
+      if (isFollowingGame) {
+        await supabase.from('game_follows').delete().eq('user_id', userProfile.id).eq('game_id', gameId)
+        setIsFollowingGame(false)
+      } else {
+        await supabase.from('game_follows').insert({ user_id: userProfile.id, game_id: gameId })
+        setIsFollowingGame(true)
+      }
+    } catch (err: any) {
+      alert('操作失败：' + err.message)
+    }
   }
 
   async function handleFollow(targetId: number) {
@@ -135,6 +156,7 @@ function GameDetailContent() {
     if (!playContent || !onlineTime) return setPostMsg('主玩内容和上线时间是必填项')
     if (!userProfile) return setPostMsg('请先登录！')
 
+    // 1. 插入悬赏令
     const { error } = await supabase.from('recruits').insert({
       game_id: gameId, creator_id: userProfile.id, play_content: playContent, online_time: onlineTime, personality: personality
     })
@@ -142,15 +164,29 @@ function GameDetailContent() {
     if (error) {
       setPostMsg('发布失败：' + error.message)
     } else {
+      // 2. 发帖加经验
       const today = new Date().toISOString().split('T')[0]
       if (userProfile.last_recruit_at !== today) {
         await supabase.from('users_profile').update({ experience: (userProfile.experience || 0) + 1, last_recruit_at: today }).eq('id', userProfile.id)
       }
+
+      // 🔥 3. 给所有关注了该游戏的玩家发通知（排除自己）
+      const { data: followers } = await supabase.from('game_follows').select('user_id').eq('game_id', gameId).neq('user_id', userProfile.id)
+      if (followers && followers.length > 0) {
+        const notifications = followers.map(f => ({
+          user_id: f.user_id,
+          actor_id: userProfile.id,
+          type: 'new_recruit',
+          content: `在 [${game?.name}] 发布了新招募：${playContent}`,
+          related_id: parseInt(gameId)
+        }))
+        await supabase.from('notifications').insert(notifications)
+      }
+
       setIsPosting(false); setPlayContent(''); setOnlineTime(''); setPersonality(''); setPostMsg(''); fetchRecruits()
     }
   }
 
-  // =============== 管理员操作：删除悬赏令 ===============
   async function handleDeleteRecruit(recruitId: number) {
     if (!confirm('⚠️ 警告：确定要删除这条悬赏通缉令吗？')) return
     await supabase.from('recruits').delete().eq('id', recruitId)
@@ -235,9 +271,16 @@ function GameDetailContent() {
         </div>
 
         <main className="max-w-4xl mx-auto px-4 md:px-6 -mt-10 relative z-20">
-          <div className="flex justify-center mb-8">
+          {/* 顶部操作区 */}
+          <div className="flex flex-wrap justify-center gap-4 mb-8">
             <button onClick={() => setIsPosting(true)} className="bg-blue-600 text-white px-8 py-3.5 rounded-xl font-black shadow-[0_0_20px_rgba(37,99,235,0.5)] hover:bg-blue-500 hover:scale-105 transition-all flex items-center gap-2 tracking-widest font-orbitron">
               <span className="text-xl">🚨</span> 发布招募通缉令
+            </button>
+            <button 
+              onClick={toggleFollowGame} 
+              className={`px-8 py-3.5 rounded-xl font-black shadow-lg transition-all flex items-center gap-2 tracking-widest font-orbitron border ${isFollowingGame ? 'bg-gray-800 text-gray-300 border-gray-600' : 'bg-transparent text-cyan-400 border-cyan-500 hover:bg-cyan-500/10'}`}
+            >
+              {isFollowingGame ? '✅ 已订阅本频道' : '🔔 订阅频道更新'}
             </button>
           </div>
 
@@ -256,7 +299,6 @@ function GameDetailContent() {
                       <h2 className="text-4xl font-black text-cyan-400 font-orbitron tracking-tighter drop-shadow-[0_0_8px_rgba(6,182,212,0.5)]">WANTED</h2>
                       <div className="flex gap-2 items-center">
                         <span className="text-xs font-bold bg-blue-900/50 border border-blue-500/50 text-blue-300 px-2.5 py-1 rounded">悬赏招募</span>
-                        {/* 🔥 管理员专属操作：删除悬赏令 */}
                         {userProfile && isAdmin(userProfile.id) && (
                            <button onClick={() => handleDeleteRecruit(recruit.id)} className="text-xs text-red-400 bg-red-900/20 hover:bg-red-900/50 border border-red-500/30 px-2 py-1 rounded transition" title="删除此通缉令">🗑️ 删除</button>
                         )}

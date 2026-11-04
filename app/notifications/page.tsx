@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import Navbar from '@/components/Navbar'
+import Link from 'next/link'
 
 export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<any[]>([])
@@ -11,41 +12,21 @@ export default function NotificationsPage() {
   useEffect(() => {
     async function fetchNotifications() {
       try {
-        // 1. 获取当前系统登录用户
-        const { data: { user }, error: authError } = await supabase.auth.getUser()
-        if (authError || !user) {
-          console.log("没有获取到登录用户", authError)
-          setLoading(false)
-          return
-        }
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return
 
-        // 2. 去资料表里找这个用户的 ID
-        const { data: profile, error: profileError } = await supabase
-          .from('users_profile')
-          .select('id')
-          .eq('auth_id', user.id)
-          .single()
+        const { data: profile } = await supabase.from('users_profile').select('id').eq('auth_id', user.id).single()
+        if (!profile) return
 
-        if (profileError || !profile) {
-          console.log("没找到对应的资料", profileError)
-          setLoading(false)
-          return
-        }
-
-        // 3. 查询发给我的通知（已修复双外键冲突）
-        const { data, error: notifError } = await supabase
+        const { data } = await supabase
           .from('notifications')
           .select(`*, actor:users_profile!notifications_actor_id_fkey(nickname, avatar_url, id)`)
           .eq('user_id', profile.id)
           .order('created_at', { ascending: false })
 
-        if (notifError) {
-          console.error("查询通知报错:", notifError)
-        } else {
-          setNotifications(data || [])
-        }
+        if (data) setNotifications(data)
       } catch (err) {
-        console.error("发生异常:", err)
+        console.error(err)
       } finally {
         setLoading(false)
       }
@@ -54,31 +35,50 @@ export default function NotificationsPage() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[#050B14] text-gray-200">
       <Navbar />
       <main className="max-w-3xl mx-auto p-6 pt-10">
-        <h1 className="text-2xl font-bold mb-6 text-gray-800">🔔 通知中心</h1>
+        <h1 className="text-2xl font-black text-cyan-400 mb-6 font-orbitron tracking-wider flex items-center gap-2">
+          <span className="text-3xl">🔔</span> 通知中心
+        </h1>
         
         {loading ? (
-          <p className="text-center text-gray-500">加载中...</p>
+          <p className="text-center text-gray-500 animate-pulse">加载中...</p>
         ) : notifications.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-dashed p-10 text-center text-gray-400">
-            暂时没有新通知
+          <div className="bg-[#0A111F] rounded-2xl border border-dashed border-gray-700 p-10 text-center text-gray-500">
+            暂时没有新通知，快去大厅逛逛吧！
           </div>
         ) : (
           <div className="space-y-4">
             {notifications.map(n => (
-              <div key={n.id} className="p-4 rounded-xl border bg-white flex items-center justify-between hover:shadow-sm transition">
-                <div className="flex items-center gap-3">
-                  <img src={n.actor?.avatar_url || '/logo.png'} className="w-12 h-12 rounded-full object-cover bg-gray-100" />
+              <div key={n.id} className="bg-[#0A111F]/80 backdrop-blur-sm p-4 rounded-xl border border-cyan-900/50 flex items-start justify-between hover:border-cyan-500/50 transition">
+                <div className="flex items-start gap-4">
+                  <img src={n.actor?.avatar_url || '/logo.png'} className="w-12 h-12 rounded-full object-cover bg-gray-800 border border-gray-700 mt-1" />
                   <div>
-                    <p className="text-[15px]">
-                      <span className="font-bold text-gray-800">{n.actor?.nickname || '未知用户'}</span> 
-                      {n.type === 'follow' ? ' 关注了你' : ` 评论了你的招募：${n.content}`}
+                    <p className="text-[15px] leading-relaxed">
+                      <span className="font-bold text-white mr-2">{n.actor?.nickname}</span>
+                      {n.type === 'follow' && <span className="text-gray-300">关注了你</span>}
+                      {n.type === 'comment' && (
+                        <span className="text-gray-300">评论了你的招募：<span className="text-cyan-400">"{n.content}"</span></span>
+                      )}
+                      {n.type === 'new_recruit' && (
+                        <span className="text-gray-300">
+                          发布了一条新招募：<span className="text-cyan-400">"{n.content}"</span>
+                        </span>
+                      )}
                     </p>
-                    <p className="text-xs text-gray-400 mt-1">ID: {n.actor?.id}</p>
+                    <p className="text-xs text-gray-500 mt-2 font-mono">
+                      ID: {n.actor?.id} · {new Date(n.created_at).toLocaleString()}
+                    </p>
                   </div>
                 </div>
+                
+                {/* 如果是新招募通知，加上直接前往按钮 */}
+                {n.type === 'new_recruit' && n.related_id && (
+                  <Link href={`/game/${n.related_id}`} className="text-xs bg-cyan-600/20 text-cyan-400 border border-cyan-500/50 px-3 py-1.5 rounded-lg hover:bg-cyan-600 hover:text-white transition whitespace-nowrap">
+                    去围观 →
+                  </Link>
+                )}
               </div>
             ))}
           </div>
