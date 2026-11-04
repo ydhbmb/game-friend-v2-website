@@ -14,7 +14,7 @@ function GameDetailContent() {
   const [userProfile, setUserProfile] = useState<any>(null)
   const [recruits, setRecruits] = useState<any[]>([])
   const [followedIds, setFollowedIds] = useState<number[]>([])
-  const [likedIds, setLikedIds] = useState<number[]>([]) // 记录我点过赞的通缉令
+  const [likedIds, setLikedIds] = useState<number[]>([])
   const [loading, setLoading] = useState(true)
 
   const [isPosting, setIsPosting] = useState(false)
@@ -29,7 +29,58 @@ function GameDetailContent() {
   const [commentLoading, setCommentLoading] = useState(false)
 
   useEffect(() => {
-      async function handleLike(recruitId: number, creatorId: number) {
+    async function init() {
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          const { data } = await supabase.from('users_profile').select('*').eq('auth_id', user.id).single()
+          if (data) {
+            setUserProfile(data)
+            const { data: followsData } = await supabase.from('follows').select('following_id').eq('follower_id', data.id)
+            if (followsData) setFollowedIds(followsData.map(f => f.following_id))
+            const { data: likesData } = await supabase.from('likes').select('recruit_id').eq('user_id', data.id)
+            if (likesData) setLikedIds(likesData.map(l => l.recruit_id))
+          }
+        }
+
+        const { data: gameData } = await supabase.from('games').select(`*, creator:users_profile(nickname)`).eq('id', gameId).single()
+        setGame(gameData)
+        fetchRecruits()
+      } catch (err) {
+        console.error("加载数据失败", err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    if (gameId) init()
+  }, [gameId])
+
+  async function fetchRecruits() {
+    const { data } = await supabase
+      .from('recruits')
+      .select(`*, creator:users_profile(nickname, avatar_url, id)`)
+      .eq('game_id', gameId)
+      .order('created_at', { ascending: false })
+    if (data) setRecruits(data)
+  }
+
+  async function handleFollow(targetId: number) {
+    if (!userProfile) return alert('请先登录！')
+    if (targetId === userProfile.id) return
+
+    const isFollowed = followedIds.includes(targetId)
+    if (isFollowed) {
+      await supabase.from('follows').delete().eq('follower_id', userProfile.id).eq('following_id', targetId)
+      setFollowedIds(followedIds.filter(id => id !== targetId))
+    } else {
+      await supabase.from('follows').insert({ follower_id: userProfile.id, following_id: targetId })
+      await supabase.from('notifications').insert({ user_id: targetId, actor_id: userProfile.id, type: 'follow' })
+      setFollowedIds([...followedIds, targetId])
+    }
+  }
+
+  // 👇 核心：点赞加经验逻辑（含严格报错拦截） 👇
+  async function handleLike(recruitId: number, creatorId: number) {
     if (!userProfile) return alert('请先登录！')
     if (likedIds.includes(recruitId)) return alert('你已经赞过这条通缉令啦！')
     if (creatorId === userProfile.id) return alert('不能给自己点赞哦！')
@@ -43,112 +94,42 @@ function GameDetailContent() {
       const { error: likeError } = await supabase.from('likes').insert({ user_id: userProfile.id, recruit_id: recruitId })
       if (likeError) throw new Error(likeError.message)
 
-      // 2. 给创作者加经验
-      const { data: creatorData, error: creatorError } = await supabase.from('users_profile').select('experience').eq('id', creatorId).single()
+      // 2. 给创作者加经验（强制返回数据检查）
+      const { data: creatorData } = await supabase.from('users_profile').select('experience').eq('id', creatorId).single()
       if (creatorData) {
-        const { error: updateCreatorError } = await supabase.from('users_profile').update({ experience: (creatorData.experience || 0) + 1 }).eq('id', creatorId)
-        if (updateCreatorError) throw new Error('更新创作者经验失败')
+        const { data: updatedCreator, error: creatorErr } = await supabase.from('users_profile')
+          .update({ experience: (creatorData.experience || 0) + 1 })
+          .eq('id', creatorId)
+          .select() 
+        
+        if (creatorErr || !updatedCreator || updatedCreator.length === 0) {
+          throw new Error('给创作者加经验被数据库拦截')
+        }
       }
 
-      // 3. 给点赞者加经验
-      const { error: updateMeError } = await supabase.from('users_profile').update({ 
-        experience: (userProfile.experience || 0) + 1,
-        last_like_at: today,
-        daily_like_count: currentLikeCount + 1
-      }).eq('id', userProfile.id)
-      if (updateMeError) throw new Error('更新你的经验失败')
+      // 3. 给点赞者加经验（强制返回数据检查）
+      const { data: updatedMe, error: updateMeErr } = await supabase.from('users_profile')
+        .update({ 
+          experience: (userProfile.experience || 0) + 1,
+          last_like_at: today,
+          daily_like_count: currentLikeCount + 1
+        })
+        .eq('id', userProfile.id)
+        .select() 
+
+      if (updateMeErr || !updatedMe || updatedMe.length === 0) {
+        throw new Error('给你加经验被数据库拦截')
+      }
 
       // 4. 更新前端状态
       setLikedIds([...likedIds, recruitId])
       setUserProfile({ ...userProfile, experience: (userProfile.experience || 0) + 1, last_like_at: today, daily_like_count: currentLikeCount + 1 })
+      
       alert('点赞成功！双方各获得 1 经验！')
+      window.location.reload(); 
+      
     } catch (err: any) {
       console.error(err)
-      alert('点赞失败：' + err.message)
-    }
-  }
-    if (gameId) init()
-  }, [gameId])
-
-  async function fetchRecruits() {
-    const { data } = await supabase
-      .from('recruits')
-      .select(`*, creator:users_profile(nickname, avatar_url, id)`)
-      .eq('game_id', gameId)
-      .order('created_at', { ascending: false })
-    if (data) setRecruits(data)
-  }
-
-  // 关注逻辑
-  async function handleFollow(targetId: number) {
-    if (!userProfile) return alert('请先登录！')
-    if (targetId === userProfile.id) return
-
-    const isFollowed = followedIds.includes(targetId)
-    if (isFollowed) {
-      await supabase.from('follows').delete().eq('follower_id', userProfile.id).eq('following_id', targetId)
-      setFollowedIds(followedIds.filter(id => id !== targetId))
-    } else {
-      await supabase.from('follows').insert({ follower_id: userProfile.id, following_id: targetId })
-      await supabase.from('notifications').insert({
-        user_id: targetId,
-        actor_id: userProfile.id,
-        type: 'follow'
-      })
-      setFollowedIds([...followedIds, targetId])
-    }
-  }
-
-  // 👇👇👇 核心：点赞加经验逻辑 👇👇👇
-  async function handleLike(recruitId: number, creatorId: number) {
-    if (!userProfile) return alert('请先登录！')
-    if (likedIds.includes(recruitId)) return alert('你已经赞过这条通缉令啦！')
-    if (creatorId === userProfile.id) return alert('不能给自己点赞哦！')
-
-    const today = new Date().toISOString().split('T')[0]
-    const lastLikeDate = userProfile.last_like_at || ''
-    
-    let currentLikeCount = userProfile.daily_like_count || 0
-    if (lastLikeDate !== today) {
-      currentLikeCount = 0 // 如果今天还没点过，重置为0
-    }
-
-    if (currentLikeCount >= 5) {
-      return alert('你今天已经点赞 5 次啦，明天再来吧！')
-    }
-
-    try {
-      // 1. 插入点赞记录
-      const { error: likeError } = await supabase.from('likes').insert({
-        user_id: userProfile.id,
-        recruit_id: recruitId
-      })
-      if (likeError) throw likeError
-
-      // 2. 给发帖人 +1 经验
-      const { data: creatorData } = await supabase.from('users_profile').select('experience').eq('id', creatorId).single()
-      if (creatorData) {
-        await supabase.from('users_profile').update({ experience: (creatorData.experience || 0) + 1 }).eq('id', creatorId)
-      }
-
-      // 3. 给点赞人 +1 经验，并更新每日限制
-      await supabase.from('users_profile').update({ 
-        experience: (userProfile.experience || 0) + 1,
-        last_like_at: today,
-        daily_like_count: currentLikeCount + 1
-      }).eq('id', userProfile.id)
-
-      // 4. 更新本地状态，按钮瞬间变红
-      setLikedIds([...likedIds, recruitId])
-      setUserProfile({
-        ...userProfile,
-        experience: (userProfile.experience || 0) + 1,
-        last_like_at: today,
-        daily_like_count: currentLikeCount + 1
-      })
-      
-      alert('点赞成功！你和对方各获得 1 经验！')
-    } catch (err: any) {
       alert('点赞失败：' + err.message)
     }
   }
@@ -158,31 +139,17 @@ function GameDetailContent() {
     if (!userProfile) return setPostMsg('请先登录！')
 
     const { error } = await supabase.from('recruits').insert({
-      game_id: gameId,
-      creator_id: userProfile.id,
-      play_content: playContent,
-      online_time: onlineTime,
-      personality: personality
+      game_id: gameId, creator_id: userProfile.id, play_content: playContent, online_time: onlineTime, personality: personality
     })
 
     if (error) {
       setPostMsg('发布失败：' + error.message)
     } else {
-      // 发帖加经验 (每天限制一次)
       const today = new Date().toISOString().split('T')[0]
       if (userProfile.last_recruit_at !== today) {
-        await supabase.from('users_profile').update({ 
-          experience: (userProfile.experience || 0) + 1,
-          last_recruit_at: today
-        }).eq('id', userProfile.id)
+        await supabase.from('users_profile').update({ experience: (userProfile.experience || 0) + 1, last_recruit_at: today }).eq('id', userProfile.id)
       }
-
-      setIsPosting(false)
-      setPlayContent('')
-      setOnlineTime('')
-      setPersonality('')
-      setPostMsg('')
-      fetchRecruits()
+      setIsPosting(false); setPlayContent(''); setOnlineTime(''); setPersonality(''); setPostMsg(''); fetchRecruits()
     }
   }
 
@@ -193,11 +160,7 @@ function GameDetailContent() {
 
   async function fetchComments(recruitId: number) {
     setCommentLoading(true)
-    const { data } = await supabase
-      .from('comments')
-      .select(`*, user:users_profile(nickname, avatar_url)`)
-      .eq('recruit_id', recruitId)
-      .order('created_at', { ascending: true })
+    const { data } = await supabase.from('comments').select(`*, user:users_profile(nickname, avatar_url)`).eq('recruit_id', recruitId).order('created_at', { ascending: true })
     if (data) setComments(data)
     setCommentLoading(false)
   }
@@ -208,21 +171,39 @@ function GameDetailContent() {
     setNewComment('')
 
     const { error } = await supabase.from('comments').insert({
-      recruit_id: activeRecruit.id,
-      user_id: userProfile.id,
-      content: content
+      recruit_id: activeRecruit.id, user_id: userProfile.id, content: content
     })
 
     if (!error) {
       if (activeRecruit.creator.id !== userProfile.id) {
         await supabase.from('notifications').insert({
-          user_id: activeRecruit.creator.id,
-          actor_id: userProfile.id,
-          type: 'comment',
-          content: content,
-          related_id: parseInt(gameId)
+          user_id: activeRecruit.creator.id, actor_id: userProfile.id, type: 'comment', content: content, related_id: parseInt(gameId)
+        })
+        
+        const { data: creatorData } = await supabase.from('users_profile').select('experience').eq('id', activeRecruit.creator.id).single()
+        if (creatorData) {
+          await supabase.from('users_profile').update({ experience: (creatorData.experience || 0) + 1 }).eq('id', activeRecruit.creator.id)
+        }
+      }
+
+      const today = new Date().toISOString().split('T')[0]
+      let currentCommentCount = userProfile.last_comment_at === today ? (userProfile.daily_comment_count || 0) : 0
+      
+      if (currentCommentCount < 5) {
+        await supabase.from('users_profile').update({ 
+          experience: (userProfile.experience || 0) + 1,
+          last_comment_at: today,
+          daily_comment_count: currentCommentCount + 1
+        }).eq('id', userProfile.id)
+        
+        setUserProfile({
+          ...userProfile,
+          experience: (userProfile.experience || 0) + 1,
+          last_comment_at: today,
+          daily_comment_count: currentCommentCount + 1
         })
       }
+
       fetchComments(activeRecruit.id)
     }
   }
@@ -233,132 +214,76 @@ function GameDetailContent() {
   return (
     <div className="min-h-screen bg-[#050B14] text-gray-200 relative overflow-hidden pb-20">
       <div className="absolute top-[-10%] left-[-10%] w-[40vw] h-[40vw] bg-fuchsia-600/10 rounded-full blur-[120px] pointer-events-none"></div>
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40vw] h-[40vw] bg-cyan-600/10 rounded-full blur-[120px] pointer-events-none"></div>
       
       <div className="relative z-10">
         <Navbar />
 
         <div className="h-64 w-full bg-[#0A111F] relative flex items-center justify-center overflow-hidden border-b border-cyan-500/30">
-          {game.cover_url ? (
-            <img src={game.cover_url} className="absolute inset-0 w-full h-full object-cover opacity-30" />
-          ) : (
-            <div className="absolute inset-0 opacity-10 bg-[url('/logo.png')] bg-center bg-no-repeat bg-contain"></div>
-          )}
+          {game.cover_url ? <img src={game.cover_url} className="absolute inset-0 w-full h-full object-cover opacity-30" /> : <div className="absolute inset-0 opacity-10 bg-[url('/logo.png')] bg-center bg-no-repeat bg-contain"></div>}
           <div className="absolute inset-0 bg-gradient-to-t from-[#050B14] via-transparent to-black/50"></div>
 
           <div className="relative z-10 w-full max-w-4xl px-6 flex flex-col items-center mt-6">
-            <h1 className="text-5xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 mb-2 tracking-widest text-center break-all drop-shadow-[0_0_15px_rgba(6,182,212,0.5)]">
-              {game.name}
-            </h1>
-            <p className="text-cyan-300 bg-cyan-950/50 border border-cyan-500/50 px-4 py-1.5 rounded-full text-sm backdrop-blur-md">
-              👑 节点创建者: {game.creator?.nickname || '未知'}
-            </p>
+            <h1 className="text-5xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 mb-2 tracking-widest text-center break-all drop-shadow-[0_0_15px_rgba(6,182,212,0.5)] font-orbitron">{game.name}</h1>
+            <p className="text-cyan-300 bg-cyan-950/50 border border-cyan-500/50 px-4 py-1.5 rounded-full text-sm backdrop-blur-md">👑 节点创建者: {game.creator?.nickname || '未知'}</p>
           </div>
 
-          <button 
-            onClick={() => router.push('/')}
-            className="absolute top-6 left-6 bg-black/60 border border-cyan-500/50 text-cyan-400 px-5 py-2 rounded-lg text-sm font-bold hover:bg-cyan-500/20 transition shadow-[0_0_10px_rgba(6,182,212,0.3)]"
-          >
-            ← 断开连接
-          </button>
+          <button onClick={() => router.push('/')} className="absolute top-6 left-6 bg-black/60 border border-cyan-500/50 text-cyan-400 px-5 py-2 rounded-lg text-sm font-bold hover:bg-cyan-500/20 transition">← 断开连接</button>
         </div>
 
         <main className="max-w-4xl mx-auto px-4 md:px-6 -mt-10 relative z-20">
           <div className="flex justify-center mb-8">
-            <button 
-              onClick={() => setIsPosting(true)}
-              className="bg-blue-600 text-white px-8 py-3.5 rounded-xl font-black shadow-[0_0_20px_rgba(37,99,235,0.5)] hover:bg-blue-500 hover:scale-105 transition-all flex items-center gap-2 tracking-widest"
-            >
+            <button onClick={() => setIsPosting(true)} className="bg-blue-600 text-white px-8 py-3.5 rounded-xl font-black shadow-[0_0_20px_rgba(37,99,235,0.5)] hover:bg-blue-500 hover:scale-105 transition-all flex items-center gap-2 tracking-widest font-orbitron">
               <span className="text-xl">🚨</span> 发布招募通缉令
             </button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
-            {recruits.length === 0 ? (
-              <div className="col-span-full text-center py-20 bg-[#0A111F]/50 border border-cyan-900/50 rounded-2xl text-cyan-500/50">
-                暂无数据流，快来发布第一张通缉令吧！
-              </div>
-            ) : (
-              recruits.map((recruit) => (
-                <div key={recruit.id} className="relative bg-[#0A111F]/90 backdrop-blur-md rounded-xl border border-cyan-900/50 overflow-hidden flex flex-col group hover:border-cyan-400 hover:shadow-[0_0_20px_rgba(6,182,212,0.2)] transition-all duration-300">
-                  
-                  <div className="absolute inset-0 opacity-5 pointer-events-none flex items-center justify-center">
-                    {recruit.creator?.avatar_url ? (
-                      <img src={recruit.creator.avatar_url} className="w-56 h-56 object-cover grayscale rounded-full" />
-                    ) : (
-                      <span className="text-9xl font-black text-white">!</span>
-                    )}
+            {recruits.map((recruit) => (
+              <div key={recruit.id} className="relative bg-[#0A111F]/90 backdrop-blur-md rounded-xl border border-cyan-900/50 overflow-hidden flex flex-col group hover:border-cyan-400 hover:shadow-[0_0_20px_rgba(6,182,212,0.2)] transition-all duration-300">
+                <div className="absolute inset-0 opacity-5 pointer-events-none flex items-center justify-center">
+                  {recruit.creator?.avatar_url ? <img src={recruit.creator.avatar_url} className="w-56 h-56 object-cover grayscale rounded-full" /> : <span className="text-9xl font-black text-white">!</span>}
+                </div>
+
+                <div className="p-6 relative z-10 flex-1 flex flex-col">
+                  <div className="flex justify-between items-start mb-6 border-b border-cyan-500/20 pb-3">
+                    <h2 className="text-4xl font-black text-cyan-400 font-orbitron tracking-tighter drop-shadow-[0_0_8px_rgba(6,182,212,0.5)]">WANTED</h2>
+                    <span className="text-xs font-bold bg-blue-900/50 border border-blue-500/50 text-blue-300 px-2.5 py-1 rounded">悬赏招募</span>
                   </div>
 
-                  <div className="p-6 relative z-10 flex-1 flex flex-col">
-                    <div className="flex justify-between items-start mb-6 border-b border-cyan-500/20 pb-3">
-                      <h2 className="text-4xl font-black text-cyan-400 font-mono tracking-tighter drop-shadow-[0_0_8px_rgba(6,182,212,0.5)]">WANTED</h2>
-                      <span className="text-xs font-bold bg-blue-900/50 border border-blue-500/50 text-blue-300 px-2.5 py-1 rounded">悬赏招募</span>
+                  <div className="space-y-3 font-medium text-gray-300 mb-8 text-[15px]">
+                    <p className="flex items-start gap-2"><span className="text-cyan-500 font-bold shrink-0">主玩内容：</span><span className="line-clamp-2 text-white">{recruit.play_content}</span></p>
+                    <p className="flex items-start gap-2"><span className="text-cyan-500 font-bold shrink-0">在线时间：</span><span className="text-cyan-100">{recruit.online_time}</span></p>
+                    {recruit.personality && <p className="flex items-start gap-2"><span className="text-cyan-500 font-bold shrink-0">战术要求：</span><span className="line-clamp-3 text-gray-400">{recruit.personality}</span></p>}
+                  </div>
+
+                  <div className="flex items-center justify-between mt-auto pt-4 border-t border-cyan-500/20">
+                    <div className="flex items-center gap-3">
+                      <img src={recruit.creator?.avatar_url || '/logo.png'} className="w-11 h-11 rounded border border-fuchsia-500/50 object-cover bg-black" />
+                      <div>
+                        <p className="text-[15px] font-bold text-white">{recruit.creator?.nickname}</p>
+                        <p className="text-xs text-fuchsia-400 font-mono">ID: {recruit.creator?.id}</p>
+                      </div>
                     </div>
 
-                    <div className="space-y-3 font-medium text-gray-300 mb-8 text-[15px]">
-                      <p className="flex items-start gap-2">
-                        <span className="text-cyan-500 font-bold shrink-0">主玩内容：</span>
-                        <span className="line-clamp-2 text-white">{recruit.play_content}</span>
-                      </p>
-                      <p className="flex items-start gap-2">
-                        <span className="text-cyan-500 font-bold shrink-0">在线时间：</span>
-                        <span className="text-cyan-100">{recruit.online_time}</span>
-                      </p>
-                      {recruit.personality && (
-                        <p className="flex items-start gap-2">
-                          <span className="text-cyan-500 font-bold shrink-0">战术要求：</span>
-                          <span className="line-clamp-3 text-gray-400">{recruit.personality}</span>
-                        </p>
+                    <div className="flex gap-2">
+                      <button onClick={() => handleLike(recruit.id, recruit.creator.id)} className={`px-3 py-1.5 rounded text-xs font-bold transition-all border flex items-center gap-1 ${likedIds.includes(recruit.id) ? 'bg-red-900/40 text-red-400 border-red-500/50' : 'bg-transparent text-gray-400 border-gray-600 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/50'}`}>
+                        {likedIds.includes(recruit.id) ? '❤️ 已赞' : '🤍 点赞'}
+                      </button>
+                      {userProfile && userProfile.id !== recruit.creator?.id && (
+                        <button onClick={() => handleFollow(recruit.creator.id)} className={`px-3 py-1.5 rounded text-xs font-bold transition-all border ${followedIds.includes(recruit.creator.id) ? 'bg-cyan-900/40 text-cyan-400 border-cyan-500/50' : 'bg-transparent text-blue-400 border-blue-500/50 hover:bg-blue-500/20'}`}>
+                          {followedIds.includes(recruit.creator.id) ? '已关注' : '+ 关注'}
+                        </button>
                       )}
                     </div>
-
-                    <div className="flex items-center justify-between mt-auto pt-4 border-t border-cyan-500/20">
-                      <div className="flex items-center gap-3">
-                        <img src={recruit.creator?.avatar_url || '/logo.png'} className="w-11 h-11 rounded border border-fuchsia-500/50 object-cover bg-black" />
-                        <div>
-                          <p className="text-[15px] font-bold text-white">{recruit.creator?.nickname}</p>
-                          <p className="text-xs text-fuchsia-400 font-mono">ID: {recruit.creator?.id}</p>
-                        </div>
-                      </div>
-
-                      <div className="flex gap-2">
-                        {/* 👇 点赞按钮 👇 */}
-                        <button 
-                          onClick={() => handleLike(recruit.id, recruit.creator.id)}
-                          className={`px-3 py-1.5 rounded text-xs font-bold transition-all border flex items-center gap-1 ${
-                            likedIds.includes(recruit.id)
-                              ? 'bg-red-900/40 text-red-400 border-red-500/50'
-                              : 'bg-transparent text-gray-400 border-gray-600 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/50'
-                          }`}
-                        >
-                          {likedIds.includes(recruit.id) ? '❤️ 已赞' : '🤍 点赞'}
-                        </button>
-
-                        {/* 关注按钮 */}
-                        {userProfile && userProfile.id !== recruit.creator?.id && (
-                          <button 
-                            onClick={() => handleFollow(recruit.creator.id)}
-                            className={`px-3 py-1.5 rounded text-xs font-bold transition-all border ${
-                              followedIds.includes(recruit.creator.id)
-                                ? 'bg-cyan-900/40 text-cyan-400 border-cyan-500/50' 
-                                : 'bg-transparent text-blue-400 border-blue-500/50 hover:bg-blue-500/20'
-                            }`}
-                          >
-                            {followedIds.includes(recruit.creator.id) ? '已关注' : '+ 关注'}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex border-t border-blue-500/30 bg-[#050B14]/80 divide-x divide-blue-500/30">
-                    <button onClick={() => openComments(recruit)} className="flex-1 py-3.5 text-cyan-400 text-sm font-bold hover:bg-cyan-500/10 transition">💬 查看留言</button>
-                    <button onClick={() => router.push(`/messages?target=${recruit.creator.id}`)} className="flex-1 py-3.5 text-blue-400 text-sm font-bold hover:bg-blue-500/10 transition">✉️ 发送私信</button>
                   </div>
                 </div>
-              ))
-            )}
+
+                <div className="flex border-t border-blue-500/30 bg-[#050B14]/80 divide-x divide-blue-500/30">
+                  <button onClick={() => openComments(recruit)} className="flex-1 py-3.5 text-cyan-400 text-sm font-bold hover:bg-cyan-500/10 transition">💬 查看留言</button>
+                  <button onClick={() => router.push(`/messages?target=${recruit.creator.id}`)} className="flex-1 py-3.5 text-blue-400 text-sm font-bold hover:bg-blue-500/10 transition">✉️ 发送私信</button>
+                </div>
+              </div>
+            ))}
           </div>
         </main>
       </div>
@@ -366,24 +291,17 @@ function GameDetailContent() {
       {isPosting && (
         <div className="fixed inset-0 bg-[#050B14]/90 backdrop-blur-md flex items-center justify-center z-50 p-4">
           <div className="bg-[#0A111F] border border-cyan-500/50 rounded-2xl p-6 md:p-8 w-full max-w-md shadow-[0_0_30px_rgba(6,182,212,0.2)]">
-            <h3 className="text-xl md:text-2xl font-black mb-6 text-white text-center tracking-widest">
-              发布赛博通缉令
-            </h3>
-            
+            <h3 className="text-xl md:text-2xl font-black mb-6 text-white text-center tracking-widest font-orbitron">发布赛博通缉令</h3>
             <label className="block text-xs font-bold text-cyan-500 mb-1">主玩内容 *</label>
-            <input className="w-full bg-[#050B14] border border-cyan-900/50 rounded-lg px-4 py-2.5 mb-4 text-white outline-none focus:border-cyan-500 transition-colors" placeholder="如：大乱斗 / 排位上分" value={playContent} onChange={(e) => setPlayContent(e.target.value)} />
-            
+            <input className="w-full bg-[#050B14] border border-cyan-900/50 rounded-lg px-4 py-2.5 mb-4 text-white outline-none focus:border-cyan-500" placeholder="如：大乱斗 / 排位上分" value={playContent} onChange={(e) => setPlayContent(e.target.value)} />
             <label className="block text-xs font-bold text-cyan-500 mb-1">在线时间 *</label>
-            <input className="w-full bg-[#050B14] border border-cyan-900/50 rounded-lg px-4 py-2.5 mb-4 text-white outline-none focus:border-cyan-500 transition-colors" placeholder="如：每晚 20:00 - 23:00" value={onlineTime} onChange={(e) => setOnlineTime(e.target.value)} />
-            
+            <input className="w-full bg-[#050B14] border border-cyan-900/50 rounded-lg px-4 py-2.5 mb-4 text-white outline-none focus:border-cyan-500" placeholder="如：每晚 20:00 - 23:00" value={onlineTime} onChange={(e) => setOnlineTime(e.target.value)} />
             <label className="block text-xs font-bold text-cyan-500 mb-1">战术要求 (选填)</label>
-            <textarea className="w-full bg-[#050B14] border border-cyan-900/50 rounded-lg px-4 py-2.5 mb-4 text-white outline-none focus:border-cyan-500 transition-colors h-24 resize-none" placeholder="如：脾气好，不压力队友..." value={personality} onChange={(e) => setPersonality(e.target.value)} />
-            
+            <textarea className="w-full bg-[#050B14] border border-cyan-900/50 rounded-lg px-4 py-2.5 mb-4 text-white outline-none focus:border-cyan-500 h-24 resize-none" placeholder="如：脾气好，不压力队友..." value={personality} onChange={(e) => setPersonality(e.target.value)} />
             {postMsg && <p className="text-red-500 text-sm mb-4 text-center">{postMsg}</p>}
-            
             <div className="flex gap-3 mt-6">
-              <button onClick={() => setIsPosting(false)} className="flex-1 bg-gray-800 text-gray-300 py-3 rounded-lg font-bold hover:bg-gray-700 transition">取消</button>
-              <button onClick={handlePostRecruit} className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-500 shadow-[0_0_15px_rgba(37,99,235,0.4)] transition-all">确认发布</button>
+              <button onClick={() => setIsPosting(false)} className="flex-1 bg-gray-800 text-gray-300 py-3 rounded-lg font-bold hover:bg-gray-700">取消</button>
+              <button onClick={handlePostRecruit} className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-500 shadow-[0_0_15px_rgba(37,99,235,0.4)]">确认发布</button>
             </div>
           </div>
         </div>
@@ -393,39 +311,24 @@ function GameDetailContent() {
         <div className="fixed inset-0 bg-[#050B14]/90 backdrop-blur-md flex items-center justify-center z-50 p-4">
           <div className="bg-[#0A111F] border border-cyan-500/50 rounded-2xl w-full max-w-lg shadow-[0_0_30px_rgba(6,182,212,0.2)] flex flex-col h-[80vh] max-h-[600px] overflow-hidden">
             <div className="p-4 border-b border-cyan-500/30 flex justify-between items-center bg-[#0A111F]">
-              <h3 className="font-bold text-cyan-400 tracking-wider">通讯留言</h3>
-              <button onClick={() => setActiveRecruit(null)} className="text-gray-400 hover:text-red-500 text-2xl leading-none transition-colors">&times;</button>
+              <h3 className="font-bold text-cyan-400 tracking-wider font-orbitron">通讯留言</h3>
+              <button onClick={() => setActiveRecruit(null)} className="text-gray-400 hover:text-red-500 text-2xl leading-none">&times;</button>
             </div>
-            
             <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#050B14]/50">
-              {commentLoading ? (
-                <p className="text-center text-cyan-500 text-sm mt-4 animate-pulse">解析数据中...</p>
-              ) : comments.length === 0 ? (
-                <p className="text-center text-gray-500 text-sm mt-10">暂无留言记录</p>
-              ) : (
-                comments.map(c => (
+              {commentLoading ? <p className="text-center text-cyan-500 text-sm mt-4 animate-pulse">解析数据中...</p> : comments.map(c => (
                   <div key={c.id} className="flex gap-3">
                     <img src={c.user?.avatar_url || '/logo.png'} className="w-8 h-8 rounded border border-gray-600 object-cover bg-black mt-1" />
                     <div>
                       <p className="text-xs text-cyan-500 mb-1">{c.user?.nickname}</p>
-                      <div className="bg-gray-800 border border-gray-700 rounded-xl rounded-tl-sm px-4 py-2 text-sm text-gray-200 shadow-sm">
-                        {c.content}
-                      </div>
+                      <div className="bg-gray-800 border border-gray-700 rounded-xl rounded-tl-sm px-4 py-2 text-sm text-gray-200 shadow-sm">{c.content}</div>
                     </div>
                   </div>
                 ))
-              )}
+              }
             </div>
-
             <div className="p-4 border-t border-cyan-500/30 bg-[#0A111F] flex gap-2">
-              <input 
-                className="flex-1 bg-[#050B14] border border-gray-700 rounded-lg px-4 py-2 outline-none text-sm text-white focus:border-cyan-500 transition-colors"
-                placeholder="输入通讯内容..."
-                value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSendComment()}
-              />
-              <button onClick={handleSendComment} className="bg-cyan-600 text-white px-6 py-2 rounded-lg font-bold text-sm hover:bg-cyan-500 shadow-[0_0_10px_rgba(6,182,212,0.4)] transition-all">发送</button>
+              <input className="flex-1 bg-[#050B14] border border-gray-700 rounded-lg px-4 py-2 outline-none text-sm text-white focus:border-cyan-500" placeholder="输入通讯内容..." value={newComment} onChange={(e) => setNewComment(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSendComment()} />
+              <button onClick={handleSendComment} className="bg-cyan-600 text-white px-6 py-2 rounded-lg font-bold text-sm hover:bg-cyan-500 shadow-[0_0_10px_rgba(6,182,212,0.4)]">发送</button>
             </div>
           </div>
         </div>
