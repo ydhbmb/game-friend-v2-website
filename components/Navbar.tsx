@@ -111,11 +111,6 @@ export default function Navbar() {
             </div>
           </div>
         ) : (
-          <Link href="/login" className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-4 py-1.5 md:px-6 md:py-2 rounded-lg font-bold text-sm shadow-[0_0_15px_rgba(6,182,212,0.4)]">
-            登录
-          </Link>
-        )}
-      </div>
-    </nav>
-  )
-}
+         <a href="/login" className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-4 py-1.5 md:px-6 md:py-2 rounded-lg font-bold text-sm shadow-[0_0_15px_rgba(6,182,212,0.4)]">
+  登录
+</a>
