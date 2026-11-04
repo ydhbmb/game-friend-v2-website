@@ -21,9 +21,9 @@ function MessagesContent() {
   const [isBlockedByMe, setIsBlockedByMe] = useState(false)
 
   const bottomRef = useRef<HTMLDivElement>(null)
-  const messageContainerRef = useRef<HTMLDivElement>(null)
-  const prevMsgLength = useRef(0) // 用于判断是否有新消息
+  const prevMsgLength = useRef(0)
 
+  // 1. 初始化加载
   useEffect(() => {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -35,7 +35,6 @@ function MessagesContent() {
       setUserProfile(profile)
       
       if (profile) {
-        // 1. 获取互相关注的联系人
         const { data: following } = await supabase.from('follows').select('following_id').eq('follower_id', profile.id)
         const { data: followers } = await supabase.from('follows').select('follower_id').eq('following_id', profile.id)
 
@@ -49,13 +48,11 @@ function MessagesContent() {
           if (contactsData) setContacts(contactsData)
         }
 
-        // 2. 获取我拉黑的人
         const { data: blockedData } = await supabase.from('blocked_users').select('blocked_id').eq('blocker_id', profile.id)
         if (blockedData) {
           setBlockedIds(blockedData.map(b => b.blocked_id))
         }
 
-        // 3. 自动选中
         if (targetId) {
           const { data: targetProfile } = await supabase.from('users_profile').select('*').eq('id', targetId).single()
           if (targetProfile) selectContact(targetProfile)
@@ -66,46 +63,53 @@ function MessagesContent() {
     init()
   }, [router, targetId])
 
-  // 🔥 核心：实时轮询（每3秒刷新一次聊天记录）
+  // 2. 核心轮询逻辑：依赖项改为 activeContact?.id，防止对象引用变化导致定时器重启
   useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (activeContact && userProfile) {
+    let interval: NodeJS.Timeout
+    const currentId = activeContact?.id
+
+    if (currentId) {
+      // 切换联系人时，先立刻拉取一次
+      fetchMessages(currentId, false)
+      
+      // 然后每 3 秒静默拉取一次
       interval = setInterval(() => {
-        fetchMessages(activeContact.id, true) // 传入 true 代表是后台静默刷新
+        fetchMessages(currentId, true)
       }, 3000)
     }
+
     return () => {
       if (interval) clearInterval(interval)
     }
-  }, [activeContact, userProfile])
+  }, [activeContact?.id]) // 注意这里只监听 ID
 
   async function fetchMessages(contactId: number, isSilent = false) {
     if (!userProfile) return
-    if (!isSilent) setLoading(true) // 如果不是静默刷新，显示加载动画
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('messages')
       .select('*')
       .or(`and(sender_id.eq.${userProfile.id},receiver_id.eq.${contactId}),and(sender_id.eq.${contactId},receiver_id.eq.${userProfile.id})`)
       .order('created_at', { ascending: true })
     
-    if (data) {
-      setMessages(data)
-      
-      // 只有当有新消息，且是静默刷新时，才自动滚到底部
-      if (isSilent && data.length > prevMsgLength.current) {
-        setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
+    if (!error && data) {
+      // 只有真正有数据变化时才更新 UI，避免无意义的重复渲染
+      if (data.length !== prevMsgLength.current || !isSilent) {
+        setMessages(data)
+        
+        // 如果是静默刷新，并且出现了新消息，就滚动到底部
+        if (isSilent && data.length > prevMsgLength.current) {
+          setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
+        }
+        prevMsgLength.current = data.length
       }
-      prevMsgLength.current = data.length
     }
-    if (!isSilent) setLoading(false)
   }
 
   function selectContact(contact: any) {
     setActiveContact(contact)
     setIsBlockedByMe(blockedIds.includes(contact.id))
-    prevMsgLength.current = 0 // 切换联系人重置消息长度
-    fetchMessages(contact.id)
+    prevMsgLength.current = 0 
   }
 
   async function handleSend() {
@@ -113,7 +117,7 @@ function MessagesContent() {
     const content = newMsg
     setNewMsg('')
     
-    // 发送后立刻更新本地UI（乐观更新），不用等轮询
+    // 乐观更新：本地立刻显示
     const tempMsg = {
       id: Date.now(),
       sender_id: userProfile.id,
@@ -125,14 +129,18 @@ function MessagesContent() {
     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
     prevMsgLength.current += 1
 
+    // 发送到云端
     const { error } = await supabase.from('messages').insert({
       sender_id: userProfile.id,
       receiver_id: activeContact.id,
       content: content
     })
-    if (error) {
+    
+    // 发送成功后，立刻再拉取一次，确保多端同步
+    if (!error) {
+      fetchMessages(activeContact.id, true)
+    } else {
       alert('发送失败，请检查网络')
-      fetchMessages(activeContact.id) // 失败则重新拉取真实数据
     }
   }
 
@@ -177,7 +185,6 @@ function MessagesContent() {
                   >
                     <div className="relative">
                       <img src={c.avatar_url || '/logo.png'} className="w-12 h-12 rounded border border-gray-700 object-cover bg-black" />
-                      {activeContact?.id === c.id && <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-[#0A111F]"></span>}
                     </div>
                     <div>
                       <p className="font-bold text-gray-200 text-sm">{c.nickname}</p>
@@ -207,7 +214,7 @@ function MessagesContent() {
                   </button>
                 </div>
                 
-                <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4" ref={messageContainerRef}>
+                <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
                   {messages.map((m, index) => {
                     const isMe = m.sender_id === userProfile.id
                     return (
