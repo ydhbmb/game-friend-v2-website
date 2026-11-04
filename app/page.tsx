@@ -22,6 +22,12 @@ export default function HomePage() {
   
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // 判断是否是最高权限管理员
+  const isAdmin = (uid: number) => {
+    const admins = [1, 10000, 11111, 22222, 33333, 44444, 55555, 66666, 77777, 88888, 99999]
+    return admins.includes(uid)
+  }
+
   useEffect(() => {
     async function init() {
       try {
@@ -89,6 +95,33 @@ export default function HomePage() {
     } finally {
       setUploading(false)
     }
+  }
+
+  // =============== 管理员操作：改名 & 删除 ===============
+  async function handleUpdateName(gameId: number, oldName: string) {
+    const newName = prompt('请输入新的游戏模块名称：', oldName)
+    if (!newName || newName.trim() === '' || newName === oldName) return
+    await supabase.from('games').update({ name: newName.trim() }).eq('id', gameId)
+    fetchGames()
+  }
+
+  async function handleDeleteGame(gameId: number) {
+    if (!confirm('⚠️ 警告：确定要彻底删除这个游戏模块以及里面的所有通缉令吗？此操作不可逆！')) return
+    await supabase.from('games').delete().eq('id', gameId)
+    fetchGames()
+  }
+
+  async function handleUpdateCover(gameId: number, e: React.ChangeEvent<HTMLInputElement>) {
+    e.preventDefault()
+    if (!e.target.files || !e.target.files[0]) return
+    const file = e.target.files[0]
+    const fileExt = file.name.split('.').pop()
+    const fileName = `game-${gameId}-${Date.now()}.${fileExt}`
+    const { error: uploadError } = await supabase.storage.from('game_covers').upload(fileName, file)
+    if (uploadError) return alert('上传失败：' + uploadError.message)
+    const { data: { publicUrl } } = supabase.storage.from('game_covers').getPublicUrl(fileName)
+    await supabase.from('games').update({ cover_url: publicUrl }).eq('id', gameId)
+    fetchGames()
   }
 
   return (
@@ -212,14 +245,20 @@ export default function HomePage() {
                               <span className="text-[9px] bg-yellow-500/20 text-yellow-400 border border-yellow-500/50 px-1.5 py-0.5 rounded shadow-[0_0_8px_rgba(250,204,21,0.4)]">⚡ 先锋</span>
                             </div>
                           </div>
-                          
-                          <div className="absolute bottom-2 right-4 flex gap-1 opacity-30 group-hover:opacity-100 transition-opacity">
-                            <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full"></span>
-                            <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full"></span>
-                            <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full"></span>
-                          </div>
                         </div>
                       </Link>
+
+                      {/* 🔥 管理员专属操作面板 */}
+                      {userProfile && isAdmin(userProfile.id) && (
+                        <div className="absolute top-3 right-3 z-20 flex gap-1 opacity-0 group-hover:opacity-100 transition-all duration-300">
+                          <button onClick={(e) => { e.preventDefault(); handleUpdateName(game.id, game.name); }} className="bg-black/80 backdrop-blur border border-yellow-500/50 text-yellow-400 text-xs px-2 py-1 rounded hover:bg-yellow-500/20" title="修改名称">✏️</button>
+                          <label className="bg-black/80 backdrop-blur border border-cyan-500/50 text-cyan-400 text-xs px-2 py-1 rounded cursor-pointer hover:bg-cyan-500/20" title="修改封面">
+                            ⚙️
+                            <input type="file" accept="image/*" className="hidden" onChange={(e) => handleUpdateCover(game.id, e)} />
+                          </label>
+                          <button onClick={(e) => { e.preventDefault(); handleDeleteGame(game.id); }} className="bg-black/80 backdrop-blur border border-red-500/50 text-red-400 text-xs px-2 py-1 rounded hover:bg-red-500/20" title="删除模块">🗑️</button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

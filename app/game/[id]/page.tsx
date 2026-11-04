@@ -28,6 +28,12 @@ function GameDetailContent() {
   const [newComment, setNewComment] = useState('')
   const [commentLoading, setCommentLoading] = useState(false)
 
+  // 判断是否是最高权限管理员
+  const isAdmin = (uid: number) => {
+    const admins = [1, 10000, 11111, 22222, 33333, 44444, 55555, 66666, 77777, 88888, 99999]
+    return admins.includes(uid)
+  }
+
   useEffect(() => {
     async function init() {
       try {
@@ -60,7 +66,7 @@ function GameDetailContent() {
       .from('recruits')
       .select(`*, creator:users_profile(nickname, avatar_url, id)`)
       .eq('game_id', gameId)
-      .order('created_at', { ascending: false }) // 最新发布的在最前面
+      .order('created_at', { ascending: false }) 
     if (data) setRecruits(data)
   }
 
@@ -142,6 +148,13 @@ function GameDetailContent() {
       }
       setIsPosting(false); setPlayContent(''); setOnlineTime(''); setPersonality(''); setPostMsg(''); fetchRecruits()
     }
+  }
+
+  // =============== 管理员操作：删除悬赏令 ===============
+  async function handleDeleteRecruit(recruitId: number) {
+    if (!confirm('⚠️ 警告：确定要删除这条悬赏通缉令吗？')) return
+    await supabase.from('recruits').delete().eq('id', recruitId)
+    fetchRecruits()
   }
 
   async function openComments(recruit: any) {
@@ -230,7 +243,6 @@ function GameDetailContent() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
             {recruits.map((recruit, index) => {
-              // 因为数据是按时间倒序（最新在前），所以最后一条（index === length - 1）就是首杀！
               const isFirstBlood = index === recruits.length - 1;
 
               return (
@@ -242,7 +254,13 @@ function GameDetailContent() {
                   <div className="p-6 relative z-10 flex-1 flex flex-col">
                     <div className="flex justify-between items-start mb-6 border-b border-cyan-500/20 pb-3">
                       <h2 className="text-4xl font-black text-cyan-400 font-orbitron tracking-tighter drop-shadow-[0_0_8px_rgba(6,182,212,0.5)]">WANTED</h2>
-                      <span className="text-xs font-bold bg-blue-900/50 border border-blue-500/50 text-blue-300 px-2.5 py-1 rounded">悬赏招募</span>
+                      <div className="flex gap-2 items-center">
+                        <span className="text-xs font-bold bg-blue-900/50 border border-blue-500/50 text-blue-300 px-2.5 py-1 rounded">悬赏招募</span>
+                        {/* 🔥 管理员专属操作：删除悬赏令 */}
+                        {userProfile && isAdmin(userProfile.id) && (
+                           <button onClick={() => handleDeleteRecruit(recruit.id)} className="text-xs text-red-400 bg-red-900/20 hover:bg-red-900/50 border border-red-500/30 px-2 py-1 rounded transition" title="删除此通缉令">🗑️ 删除</button>
+                        )}
+                      </div>
                     </div>
 
                     <div className="space-y-3 font-medium text-gray-300 mb-8 text-[15px]">
@@ -257,7 +275,6 @@ function GameDetailContent() {
                         <div>
                           <div className="flex items-center gap-2">
                             <p className="text-[15px] font-bold text-white">{recruit.creator?.nickname}</p>
-                            {/* 🌟 荣誉徽章：首个发布招募 */}
                             {isFirstBlood && (
                               <span className="text-[9px] bg-red-500/20 text-red-400 border border-red-500/50 px-1.5 py-0.5 rounded shadow-[0_0_8px_rgba(239,68,68,0.5)]">🩸 首杀</span>
                             )}
