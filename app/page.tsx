@@ -93,51 +93,64 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-[#050B14] text-gray-200 relative overflow-hidden font-sans">
+      
+      {/* 深空科技背景特效 (加了一点青色发红光晕) */}
       <div className="absolute top-0 left-1/4 w-[50vw] h-[50vw] bg-cyan-600/10 rounded-full blur-[150px] pointer-events-none"></div>
-      <div className="absolute bottom-0 right-1/4 w-[40vw] h-[40vw] bg-blue-600/10 rounded-full blur-[150px] pointer-events-none"></div>
+      <div className="absolute bottom-0 right-1/4 w-[40vw] h-[40vw] bg-fuchsia-600/10 rounded-full blur-[150px] pointer-events-none"></div>
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#1f293733_1px,transparent_1px),linear-gradient(to_bottom,#1f293733_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none"></div>
       
       <div className="relative z-10">
         <Navbar />
 
         <main className="max-w-[1400px] mx-auto p-4 md:p-6 pt-8">
-          <div className="w-full flex justify-center mb-8 md:mb-12 relative">
-            <img src="/banner.png" alt="Wingman Games" className="w-full max-w-4xl object-contain drop-shadow-[0_0_20px_rgba(6,182,212,0.4)]" />
+          {/* Banner 加了发光动画 */}
+          <div className="w-full flex justify-center mb-12 relative">
+            <img src="/banner.png" alt="Wingman Games" className="w-full max-w-4xl object-contain drop-shadow-[0_0_30px_rgba(6,182,212,0.6)] animate-pulse-glow rounded-2xl" />
           </div>
 
-          {/* 手机端这里使用 flex-col 堆叠，电脑端 flex-row 左右排列 */}
           <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
             
-            {/* 左侧（手机端上方）：排行榜面板 */}
+            {/* 左侧：排行榜面板 */}
             <div className="w-full lg:w-1/4 flex-shrink-0">
-              <div className="bg-[#0A111F]/80 backdrop-blur-md border border-cyan-900/50 rounded-2xl p-5 shadow-lg lg:sticky lg:top-24">
+              <div className="bg-[#0A111F]/90 backdrop-blur-xl border border-cyan-900/50 rounded-2xl p-5 shadow-[0_0_30px_rgba(0,0,0,0.5)] lg:sticky lg:top-24 transition-all duration-300 hover:border-cyan-500/50">
                 <div className="flex items-center gap-2 mb-4 md:mb-6 border-b border-cyan-900/50 pb-3 md:pb-4">
-                  <span className="text-xl">🏆</span>
-                  <h2 className="text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 tracking-wider">荣耀排行榜</h2>
+                  <span className="text-xl drop-shadow-[0_0_8px_rgba(250,204,21,0.8)]">🏆</span>
+                  <h2 className="text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 tracking-wider font-orbitron">荣耀排行榜</h2>
                 </div>
                 
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {leaderboard.map((user, index) => {
                     const lvl = calculateLevel(user.experience, user.id)
                     const isTop1 = index === 0
+                    const isTop2 = index === 1
+                    const isTop3 = index === 2
                     
                     return (
-                      <div key={user.id} className={`flex items-center gap-3 p-2 rounded-xl transition-all ${
-                          isTop1 ? 'bg-yellow-500/10 border border-yellow-500/30' : 'hover:bg-cyan-900/20'
+                      <div key={user.id} className={`flex items-center gap-3 p-2.5 rounded-xl transition-all duration-300 hover:translate-x-1 ${
+                          isTop1 ? 'bg-gradient-to-r from-yellow-500/20 to-transparent border border-yellow-500/30 shadow-[0_0_15px_rgba(250,204,21,0.2)]' : 
+                          isTop2 ? 'bg-gradient-to-r from-gray-300/10 to-transparent border border-gray-400/20' :
+                          isTop3 ? 'bg-gradient-to-r from-orange-500/10 to-transparent border border-orange-500/20' :
+                          'hover:bg-cyan-900/30'
                         }`}>
-                        <div className={`w-6 text-center font-black italic ${isTop1 ? 'text-yellow-400 text-2xl drop-shadow-[0_0_8px_rgba(250,204,21,0.8)]' : 'text-gray-600'}`}>{index + 1}</div>
+                        <div className={`w-6 text-center font-black italic font-orbitron ${
+                          isTop1 ? 'text-yellow-400 text-2xl drop-shadow-[0_0_8px_rgba(250,204,21,0.8)]' : 
+                          isTop2 ? 'text-gray-300 text-xl' : 
+                          isTop3 ? 'text-orange-400 text-xl' : 'text-gray-600'
+                        }`}>{index + 1}</div>
+                        
                         <div className="relative">
-                          <img src={user.avatar_url || '/logo.png'} className="w-9 h-9 md:w-10 md:h-10 rounded-full border border-gray-700 object-cover" />
-                          {user.id === 1 && <span className="absolute -top-3 -left-2 text-sm drop-shadow-md">👑</span>}
+                          <img src={user.avatar_url || '/logo.png'} className="w-9 h-9 md:w-10 md:h-10 rounded-full border-2 border-gray-700 object-cover" />
+                          {user.id === 1 && <span className="absolute -top-3 -left-2 text-sm drop-shadow-md z-10">👑</span>}
                         </div>
+
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-1">
                             <p className={`text-sm font-bold truncate ${isTop1 ? 'text-yellow-400' : 'text-gray-200'}`}>{user.nickname}</p>
-                            <span className="text-[10px] bg-cyan-900/50 text-cyan-300 px-1.5 py-0.5 rounded border border-cyan-500/30 whitespace-nowrap">Lv.{lvl.level}</span>
+                            <span className="text-[10px] font-orbitron font-bold bg-cyan-900/50 text-cyan-300 px-1.5 py-0.5 rounded border border-cyan-500/30 whitespace-nowrap">Lv.{lvl.level}</span>
                           </div>
                           <div className="flex items-center justify-between gap-1 mt-0.5">
                             <p className="text-[10px] text-gray-400 font-mono truncate">{lvl.icon} {lvl.name}</p>
-                            <p className="text-[10px] text-cyan-500 font-mono whitespace-nowrap">EXP: {user.experience}</p>
+                            <p className="text-[10px] text-cyan-500 font-orbitron font-bold whitespace-nowrap">EXP:{user.experience}</p>
                           </div>
                         </div>
                       </div>
@@ -147,39 +160,55 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* 右侧（手机端下方）：游戏大厅 */}
+            {/* 右侧：游戏大厅 */}
             <div className="w-full lg:w-3/4">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 md:gap-6 mb-6 md:mb-8">
-                <h2 className="text-2xl md:text-3xl font-black text-white tracking-wider flex items-center gap-3">
-                  <span className="w-2 h-6 md:h-8 bg-cyan-400 rounded-full shadow-[0_0_10px_rgba(6,182,212,0.8)]"></span>
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 md:mb-8">
+                <h2 className="text-2xl md:text-3xl font-black text-white tracking-wider flex items-center gap-3 font-orbitron">
+                  <span className="w-2 h-6 md:h-8 bg-cyan-400 rounded-full shadow-[0_0_15px_rgba(6,182,212,1)]"></span>
                   游戏接入点
                 </h2>
-                <div className="flex items-center gap-2 md:gap-4 w-full md:w-auto">
-                  <div className="flex-1 md:flex-none relative flex items-center bg-[#0A111F] border border-cyan-900/50 rounded-xl px-3 md:px-4 py-2 md:py-3 focus-within:border-cyan-400 transition-all">
-                    <span className="text-cyan-500 mr-2 text-sm md:text-base">🔍</span>
-                    <input className="bg-transparent border-none outline-none w-full md:w-48 text-xs md:text-sm text-white placeholder-gray-600" placeholder="搜索游戏..." value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && fetchGames(search)} />
+                <div className="flex items-center gap-2 w-full md:w-auto">
+                  <div className="flex-1 md:flex-none flex items-center bg-[#0A111F] border border-cyan-900/50 rounded-xl px-3 py-2 md:py-3 focus-within:border-cyan-400 focus-within:shadow-[0_0_15px_rgba(6,182,212,0.3)] transition-all">
+                    <span className="text-cyan-500 mr-2">🔍</span>
+                    <input className="bg-transparent border-none outline-none w-full md:w-56 text-xs md:text-sm text-white placeholder-gray-600" placeholder="搜索游戏..." value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && fetchGames(search)} />
                   </div>
-                  <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 text-white px-3 md:px-5 py-2 md:py-3 rounded-xl font-black text-xs md:text-sm tracking-wider hover:bg-blue-500 transition-all whitespace-nowrap">+ 创建</button>
+                  <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 text-white px-4 py-2 md:py-3 rounded-xl font-black text-xs md:text-sm hover:bg-blue-500 hover:shadow-[0_0_20px_rgba(37,99,235,0.6)] transition-all whitespace-nowrap">+ 创建</button>
                 </div>
               </div>
 
               {loading ? (
-                <div className="flex justify-center py-20"><div className="w-10 h-10 border-4 border-cyan-500/30 border-t-cyan-400 rounded-full animate-spin"></div></div>
+                <div className="flex justify-center py-20"><div className="w-12 h-12 border-4 border-cyan-500/30 border-t-cyan-400 rounded-full animate-spin"></div></div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5 md:gap-8">
                   {games.map(game => (
-                    <div key={game.id} className="relative group bg-[#0A111F] rounded-xl md:rounded-2xl border border-gray-800 overflow-hidden hover:border-cyan-400/80 transition-all duration-300 transform hover:-translate-y-1">
+                    <div key={game.id} className="relative group bg-[#0A111F] rounded-2xl border border-gray-800 overflow-hidden hover:border-cyan-400 transition-all duration-500 transform hover:-translate-y-2 hover:shadow-[0_10px_40px_rgba(6,182,212,0.3)]">
                       <Link href={`/game/${game.id}`} className="block relative z-10">
-                        <div className="h-32 md:h-40 w-full bg-black relative overflow-hidden flex items-center justify-center">
+                        <div className="h-40 md:h-48 w-full bg-black relative overflow-hidden flex items-center justify-center">
                           {game.cover_url ? (
-                            <img src={game.cover_url} alt={game.name} className="w-full h-full object-cover opacity-60 group-hover:opacity-90 transition duration-700" />
+                            <img src={game.cover_url} alt={game.name} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 group-hover:scale-110 transition duration-700" />
                           ) : (
                             <div className="absolute inset-0 flex items-center justify-center bg-[url('/logo.png')] bg-center bg-no-repeat bg-contain opacity-20 grayscale"></div>
                           )}
+                          
+                          {/* 顶部光效角标 */}
+                          <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-cyan-500 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                          
+                          {/* 悬浮时的扫描线特效 */}
+                          <div className="absolute top-0 left-0 w-full h-[2px] bg-cyan-400/50 shadow-[0_0_15px_rgba(6,182,212,1)] -translate-y-full group-hover:animate-[scan_2s_ease-in-out_infinite]"></div>
                         </div>
-                        <div className="p-3 md:p-4 relative">
-                          <h3 className="font-black text-base md:text-lg text-white mb-1 truncate">{game.name}</h3>
-                          <p className="text-[10px] md:text-xs text-gray-500 font-mono truncate">CREATOR: <span className="text-blue-400">{game.creator?.nickname || 'UNKNOWN'}</span></p>
+                        
+                        <div className="p-5 relative bg-gradient-to-t from-[#0A111F] to-[#0A111F]/90">
+                          <div className="relative z-10">
+                            <h3 className="font-black text-xl text-white mb-1 group-hover:text-cyan-400 transition-colors tracking-wide truncate">{game.name}</h3>
+                            <p className="text-xs text-gray-500 font-mono truncate">CREATOR: <span className="text-blue-400 font-bold">{game.creator?.nickname || 'UNKNOWN'}</span></p>
+                          </div>
+                          
+                          {/* 底部小圆点装饰 */}
+                          <div className="absolute bottom-2 right-4 flex gap-1 opacity-30 group-hover:opacity-100 transition-opacity">
+                            <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full"></span>
+                            <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full"></span>
+                            <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full"></span>
+                          </div>
                         </div>
                       </Link>
                     </div>
@@ -191,7 +220,33 @@ export default function HomePage() {
         </main>
       </div>
 
-      {/* 弹窗部分保持不变，为了字数精简这里省略，保留你本地原来的弹窗即可 */}
+      {/* 创建游戏弹窗 (加上了磨砂玻璃和更亮的光影) */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-[#0A111F]/95 border border-cyan-500/50 rounded-2xl p-8 w-full max-w-md shadow-[0_0_50px_rgba(6,182,212,0.3)] relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-400 via-blue-500 to-cyan-400"></div>
+            
+            <h3 className="text-2xl font-black mb-6 text-white text-center font-orbitron tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">创建游戏模块</h3>
+            
+            <div className="space-y-4">
+              <input className="w-full bg-[#050B14] border border-cyan-900/50 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-400" placeholder="输入游戏名称" value={newGameName} onChange={(e) => setNewGameName(e.target.value)} />
+              <div onClick={() => fileInputRef.current?.click()} className="w-full h-32 border-2 border-dashed border-cyan-900/50 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-cyan-400 hover:bg-cyan-500/5 transition-all overflow-hidden">
+                {coverPreview ? <img src={coverPreview} className="w-full h-full object-cover" /> : <><span className="text-2xl mb-2">🖼️</span><span className="text-gray-400 text-sm">点击上传封面</span></>}
+              </div>
+              <input type="file" className="hidden" ref={fileInputRef} onChange={handleFileChange} />
+            </div>
+            
+            {createMsg && <p className="text-red-400 text-sm text-center mt-4">{createMsg}</p>}
+            
+            <div className="flex gap-4 mt-8">
+              <button onClick={() => setIsModalOpen(false)} className="flex-1 bg-gray-800 text-gray-300 py-3 rounded-xl font-bold hover:bg-gray-700 transition">取消</button>
+              <button onClick={handleCreateGame} disabled={uploading} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-black hover:bg-blue-500 shadow-[0_0_20px_rgba(37,99,235,0.5)] transition-all">
+                {uploading ? '部署中...' : '确认创建'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
