@@ -44,93 +44,75 @@ export default function Navbar() {
   async function handleCheckIn() {
     if (!userProfile) return
     const today = new Date().toISOString().split('T')[0]
-    
-    if (userProfile.last_checkin_at === today) {
-      alert('今天已经签到过啦，明天再来吧！')
-      return
-    }
+    if (userProfile.last_checkin_at === today) return alert('今天已经签到过啦！')
 
-    const { error } = await supabase
-      .from('users_profile')
-      .update({ 
-        experience: (userProfile.experience || 0) + 5,
-        last_checkin_at: today
-      })
-      .eq('id', userProfile.id)
-
+    const { error } = await supabase.from('users_profile').update({ experience: (userProfile.experience || 0) + 5, last_checkin_at: today }).eq('id', userProfile.id)
     if (!error) {
       alert('签到成功！获得 5 经验！')
       fetchUser() 
     }
   }
 
+  // 登录/注册页不显示导航栏
   if (pathname === '/login' || pathname === '/register') return null
 
   const levelInfo = userProfile ? calculateLevel(userProfile.experience || 0, userProfile.id) : null
 
   return (
     <nav className="bg-[#050B14]/80 backdrop-blur-md border-b border-cyan-900/50 px-4 md:px-6 py-3 flex items-center justify-between sticky top-0 z-50">
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2 md:gap-4">
         <Link href="/" className="flex items-center gap-2 group">
-          <img src="/logo.png" alt="Wingman Games" className="w-10 h-10 object-contain drop-shadow-[0_0_8px_rgba(6,182,212,0.8)] group-hover:scale-110 transition-transform" />
-          <span className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 hidden sm:block tracking-widest">
-            Wingman Games
-          </span>
+          <img src="/logo.png" alt="Wingman" className="w-8 h-8 md:w-10 md:h-10 object-contain drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]" />
+          <span className="text-lg md:text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 hidden sm:block tracking-widest">Wingman Games</span>
         </Link>
 
         {userProfile && (
-          <button 
-            onClick={handleCheckIn}
-            className="text-xs bg-gradient-to-r from-cyan-600 to-blue-600 text-white px-3 py-1.5 rounded-full font-bold hover:scale-105 transition shadow-[0_0_10px_rgba(6,182,212,0.4)]"
-          >
-            📅 签到领经验
+          <button onClick={handleCheckIn} className="text-[10px] md:text-xs bg-gradient-to-r from-cyan-600 to-blue-600 text-white px-2 md:px-3 py-1.5 rounded-full font-bold hover:scale-105 transition">
+            📅 <span className="hidden sm:inline">签到领经验</span><span className="sm:hidden">签到</span>
           </button>
         )}
       </div>
       
       <div className="flex items-center gap-2 md:gap-4">
         {loading ? (
-          <span className="text-cyan-500 text-sm animate-pulse">加载中...</span>
+          <span className="text-cyan-500 text-xs animate-pulse">加载中...</span>
         ) : userProfile && levelInfo ? (
-          <div className="flex items-center gap-2 md:gap-3 relative">
-            <Link href="/messages" className="text-xs md:text-sm font-bold px-3 py-1.5 rounded-lg transition-all text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/20">
-              消息
+          <div className="flex items-center gap-1 md:gap-3 relative">
+            {/* 手机端把文字改成图标 */}
+            <Link href="/messages" className="text-xs font-bold px-2 py-1.5 rounded-lg text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/20">
+              <span className="hidden md:inline">消息</span><span className="md:hidden">✉️</span>
             </Link>
-            <Link href="/notifications" className="text-xs md:text-sm font-bold px-3 py-1.5 rounded-lg transition-all text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/20">
-              通知
+            <Link href="/notifications" className="text-xs font-bold px-2 py-1.5 rounded-lg text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/20">
+              <span className="hidden md:inline">通知</span><span className="md:hidden">🔔</span>
             </Link>
 
-            <div className="relative ml-2 pl-4 border-l border-gray-700" ref={menuRef}>
-              <div 
-                className="flex items-center gap-2 cursor-pointer select-none"
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
-              >
-                <img src={userProfile.avatar_url || '/logo.png'} className="w-9 h-9 rounded-full object-cover border border-cyan-500 shadow-[0_0_10px_rgba(6,182,212,0.5)]" />
-                
-                <div className="hidden md:flex flex-col">
+            <div className="relative ml-1 md:ml-2 pl-2 md:pl-4 border-l border-gray-700" ref={menuRef}>
+              <div className="flex items-center gap-2 cursor-pointer select-none" onClick={() => setIsMenuOpen(!isMenuOpen)}>
+                <img src={userProfile.avatar_url || '/logo.png'} className="w-8 h-8 rounded-full object-cover border border-cyan-500 shadow-[0_0_10px_rgba(6,182,212,0.5)]" />
+                <div className="hidden lg:flex flex-col">
                   <div className="flex items-center gap-1">
                     <span className="text-sm font-bold text-gray-200">{userProfile.nickname}</span>
-                    <span className="text-[10px] bg-cyan-900/50 text-cyan-300 px-1.5 py-0.5 rounded border border-cyan-500/30">
-                      Lv.{levelInfo.level}
-                    </span>
+                    <span className="text-[10px] bg-cyan-900/50 text-cyan-300 px-1.5 py-0.5 rounded border border-cyan-500/30">Lv.{levelInfo.level}</span>
                   </div>
-                  <span className="text-[10px] text-blue-400 font-bold">
-                    {levelInfo.icon} {levelInfo.name}
-                  </span>
+                  <span className="text-[10px] text-blue-400 font-bold">{levelInfo.icon} {levelInfo.name}</span>
                 </div>
               </div>
               
               {isMenuOpen && (
-                <div className="absolute top-full right-0 mt-2 w-36 bg-[#0A111F] border border-cyan-500/30 rounded-xl shadow-[0_0_20px_rgba(6,182,212,0.2)] py-2 overflow-hidden">
-                  <Link href="/user-center" onClick={() => setIsMenuOpen(false)} className="block px-4 py-2 text-sm text-gray-300 hover:bg-cyan-500/20 hover:text-white transition">用户中心</Link>
-                  <button onClick={handleLogout} className="block w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-red-500/20 transition">退出登录</button>
+                <div className="absolute top-full right-0 mt-2 w-36 bg-[#0A111F] border border-cyan-500/30 rounded-xl shadow-xl py-2">
+                  <div className="lg:hidden px-4 py-2 border-b border-gray-700 mb-1">
+                    <p className="text-xs text-white font-bold">{userProfile.nickname}</p>
+                    <p className="text-[10px] text-cyan-400">Lv.{levelInfo.level} {levelInfo.name}</p>
+                  </div>
+                  <Link href="/user-center" onClick={() => setIsMenuOpen(false)} className="block px-4 py-2 text-sm text-gray-300 hover:bg-cyan-500/20">用户中心</Link>
+                  <button onClick={handleLogout} className="block w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-red-500/20">退出登录</button>
                 </div>
               )}
             </div>
           </div>
         ) : (
-          <Link href="/login" className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-4 py-1.5 rounded-lg font-bold text-sm shadow-[0_0_15px_rgba(6,182,212,0.4)]">
-            接入网络
+          <Link href="/login" className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-4 py-1.5 md:px-6 md:py-2 rounded-lg font-bold text-sm shadow-[0_0_15px_rgba(6,182,212,0.4)]">
+            登录
           </Link>
         )}
       </div>
