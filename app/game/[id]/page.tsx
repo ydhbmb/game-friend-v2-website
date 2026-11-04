@@ -29,32 +29,44 @@ function GameDetailContent() {
   const [commentLoading, setCommentLoading] = useState(false)
 
   useEffect(() => {
-    async function init() {
-      try {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (user) {
-          const { data } = await supabase.from('users_profile').select('*').eq('auth_id', user.id).single()
-          if (data) {
-            setUserProfile(data)
-            // 获取关注状态
-            const { data: followsData } = await supabase.from('follows').select('following_id').eq('follower_id', data.id)
-            if (followsData) setFollowedIds(followsData.map(f => f.following_id))
-            
-            // 获取我点过赞的通缉令
-            const { data: likesData } = await supabase.from('likes').select('recruit_id').eq('user_id', data.id)
-            if (likesData) setLikedIds(likesData.map(l => l.recruit_id))
-          }
-        }
+      async function handleLike(recruitId: number, creatorId: number) {
+    if (!userProfile) return alert('请先登录！')
+    if (likedIds.includes(recruitId)) return alert('你已经赞过这条通缉令啦！')
+    if (creatorId === userProfile.id) return alert('不能给自己点赞哦！')
 
-        const { data: gameData } = await supabase.from('games').select(`*, creator:users_profile(nickname)`).eq('id', gameId).single()
-        setGame(gameData)
-        fetchRecruits()
-      } catch (err) {
-        console.error("加载数据失败", err)
-      } finally {
-        setLoading(false)
+    const today = new Date().toISOString().split('T')[0]
+    let currentLikeCount = userProfile.last_like_at === today ? (userProfile.daily_like_count || 0) : 0
+    if (currentLikeCount >= 5) return alert('你今天已经点赞 5 次啦，明天再来吧！')
+
+    try {
+      // 1. 插入点赞记录
+      const { error: likeError } = await supabase.from('likes').insert({ user_id: userProfile.id, recruit_id: recruitId })
+      if (likeError) throw new Error(likeError.message)
+
+      // 2. 给创作者加经验
+      const { data: creatorData, error: creatorError } = await supabase.from('users_profile').select('experience').eq('id', creatorId).single()
+      if (creatorData) {
+        const { error: updateCreatorError } = await supabase.from('users_profile').update({ experience: (creatorData.experience || 0) + 1 }).eq('id', creatorId)
+        if (updateCreatorError) throw new Error('更新创作者经验失败')
       }
+
+      // 3. 给点赞者加经验
+      const { error: updateMeError } = await supabase.from('users_profile').update({ 
+        experience: (userProfile.experience || 0) + 1,
+        last_like_at: today,
+        daily_like_count: currentLikeCount + 1
+      }).eq('id', userProfile.id)
+      if (updateMeError) throw new Error('更新你的经验失败')
+
+      // 4. 更新前端状态
+      setLikedIds([...likedIds, recruitId])
+      setUserProfile({ ...userProfile, experience: (userProfile.experience || 0) + 1, last_like_at: today, daily_like_count: currentLikeCount + 1 })
+      alert('点赞成功！双方各获得 1 经验！')
+    } catch (err: any) {
+      console.error(err)
+      alert('点赞失败：' + err.message)
     }
+  }
     if (gameId) init()
   }, [gameId])
 
