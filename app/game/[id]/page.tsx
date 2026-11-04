@@ -60,7 +60,7 @@ function GameDetailContent() {
       .from('recruits')
       .select(`*, creator:users_profile(nickname, avatar_url, id)`)
       .eq('game_id', gameId)
-      .order('created_at', { ascending: false })
+      .order('created_at', { ascending: false }) // 最新发布的在最前面
     if (data) setRecruits(data)
   }
 
@@ -79,7 +79,6 @@ function GameDetailContent() {
     }
   }
 
-  // 👇 核心：点赞加经验逻辑（含严格报错拦截） 👇
   async function handleLike(recruitId: number, creatorId: number) {
     if (!userProfile) return alert('请先登录！')
     if (likedIds.includes(recruitId)) return alert('你已经赞过这条通缉令啦！')
@@ -90,11 +89,9 @@ function GameDetailContent() {
     if (currentLikeCount >= 5) return alert('你今天已经点赞 5 次啦，明天再来吧！')
 
     try {
-      // 1. 插入点赞记录
       const { error: likeError } = await supabase.from('likes').insert({ user_id: userProfile.id, recruit_id: recruitId })
       if (likeError) throw new Error(likeError.message)
 
-      // 2. 给创作者加经验（强制返回数据检查）
       const { data: creatorData } = await supabase.from('users_profile').select('experience').eq('id', creatorId).single()
       if (creatorData) {
         const { data: updatedCreator, error: creatorErr } = await supabase.from('users_profile')
@@ -102,12 +99,9 @@ function GameDetailContent() {
           .eq('id', creatorId)
           .select() 
         
-        if (creatorErr || !updatedCreator || updatedCreator.length === 0) {
-          throw new Error('给创作者加经验被数据库拦截')
-        }
+        if (creatorErr || !updatedCreator || updatedCreator.length === 0) throw new Error('给创作者加经验被数据库拦截')
       }
 
-      // 3. 给点赞者加经验（强制返回数据检查）
       const { data: updatedMe, error: updateMeErr } = await supabase.from('users_profile')
         .update({ 
           experience: (userProfile.experience || 0) + 1,
@@ -117,11 +111,8 @@ function GameDetailContent() {
         .eq('id', userProfile.id)
         .select() 
 
-      if (updateMeErr || !updatedMe || updatedMe.length === 0) {
-        throw new Error('给你加经验被数据库拦截')
-      }
+      if (updateMeErr || !updatedMe || updatedMe.length === 0) throw new Error('给你加经验被数据库拦截')
 
-      // 4. 更新前端状态
       setLikedIds([...likedIds, recruitId])
       setUserProfile({ ...userProfile, experience: (userProfile.experience || 0) + 1, last_like_at: today, daily_like_count: currentLikeCount + 1 })
       
@@ -238,52 +229,63 @@ function GameDetailContent() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
-            {recruits.map((recruit) => (
-              <div key={recruit.id} className="relative bg-[#0A111F]/90 backdrop-blur-md rounded-xl border border-cyan-900/50 overflow-hidden flex flex-col group hover:border-cyan-400 hover:shadow-[0_0_20px_rgba(6,182,212,0.2)] transition-all duration-300">
-                <div className="absolute inset-0 opacity-5 pointer-events-none flex items-center justify-center">
-                  {recruit.creator?.avatar_url ? <img src={recruit.creator.avatar_url} className="w-56 h-56 object-cover grayscale rounded-full" /> : <span className="text-9xl font-black text-white">!</span>}
-                </div>
+            {recruits.map((recruit, index) => {
+              // 因为数据是按时间倒序（最新在前），所以最后一条（index === length - 1）就是首杀！
+              const isFirstBlood = index === recruits.length - 1;
 
-                <div className="p-6 relative z-10 flex-1 flex flex-col">
-                  <div className="flex justify-between items-start mb-6 border-b border-cyan-500/20 pb-3">
-                    <h2 className="text-4xl font-black text-cyan-400 font-orbitron tracking-tighter drop-shadow-[0_0_8px_rgba(6,182,212,0.5)]">WANTED</h2>
-                    <span className="text-xs font-bold bg-blue-900/50 border border-blue-500/50 text-blue-300 px-2.5 py-1 rounded">悬赏招募</span>
+              return (
+                <div key={recruit.id} className="relative bg-[#0A111F]/90 backdrop-blur-md rounded-xl border border-cyan-900/50 overflow-hidden flex flex-col group hover:border-cyan-400 hover:shadow-[0_0_20px_rgba(6,182,212,0.2)] transition-all duration-300">
+                  <div className="absolute inset-0 opacity-5 pointer-events-none flex items-center justify-center">
+                    {recruit.creator?.avatar_url ? <img src={recruit.creator.avatar_url} className="w-56 h-56 object-cover grayscale rounded-full" /> : <span className="text-9xl font-black text-white">!</span>}
                   </div>
 
-                  <div className="space-y-3 font-medium text-gray-300 mb-8 text-[15px]">
-                    <p className="flex items-start gap-2"><span className="text-cyan-500 font-bold shrink-0">主玩内容：</span><span className="line-clamp-2 text-white">{recruit.play_content}</span></p>
-                    <p className="flex items-start gap-2"><span className="text-cyan-500 font-bold shrink-0">在线时间：</span><span className="text-cyan-100">{recruit.online_time}</span></p>
-                    {recruit.personality && <p className="flex items-start gap-2"><span className="text-cyan-500 font-bold shrink-0">战术要求：</span><span className="line-clamp-3 text-gray-400">{recruit.personality}</span></p>}
-                  </div>
+                  <div className="p-6 relative z-10 flex-1 flex flex-col">
+                    <div className="flex justify-between items-start mb-6 border-b border-cyan-500/20 pb-3">
+                      <h2 className="text-4xl font-black text-cyan-400 font-orbitron tracking-tighter drop-shadow-[0_0_8px_rgba(6,182,212,0.5)]">WANTED</h2>
+                      <span className="text-xs font-bold bg-blue-900/50 border border-blue-500/50 text-blue-300 px-2.5 py-1 rounded">悬赏招募</span>
+                    </div>
 
-                  <div className="flex items-center justify-between mt-auto pt-4 border-t border-cyan-500/20">
-                    <div className="flex items-center gap-3">
-                      <img src={recruit.creator?.avatar_url || '/logo.png'} className="w-11 h-11 rounded border border-fuchsia-500/50 object-cover bg-black" />
-                      <div>
-                        <p className="text-[15px] font-bold text-white">{recruit.creator?.nickname}</p>
-                        <p className="text-xs text-fuchsia-400 font-mono">ID: {recruit.creator?.id}</p>
+                    <div className="space-y-3 font-medium text-gray-300 mb-8 text-[15px]">
+                      <p className="flex items-start gap-2"><span className="text-cyan-500 font-bold shrink-0">主玩内容：</span><span className="line-clamp-2 text-white">{recruit.play_content}</span></p>
+                      <p className="flex items-start gap-2"><span className="text-cyan-500 font-bold shrink-0">在线时间：</span><span className="text-cyan-100">{recruit.online_time}</span></p>
+                      {recruit.personality && <p className="flex items-start gap-2"><span className="text-cyan-500 font-bold shrink-0">战术要求：</span><span className="line-clamp-3 text-gray-400">{recruit.personality}</span></p>}
+                    </div>
+
+                    <div className="flex items-center justify-between mt-auto pt-4 border-t border-cyan-500/20">
+                      <div className="flex items-center gap-3">
+                        <img src={recruit.creator?.avatar_url || '/logo.png'} className="w-11 h-11 rounded border border-fuchsia-500/50 object-cover bg-black" />
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <p className="text-[15px] font-bold text-white">{recruit.creator?.nickname}</p>
+                            {/* 🌟 荣誉徽章：首个发布招募 */}
+                            {isFirstBlood && (
+                              <span className="text-[9px] bg-red-500/20 text-red-400 border border-red-500/50 px-1.5 py-0.5 rounded shadow-[0_0_8px_rgba(239,68,68,0.5)]">🩸 首杀</span>
+                            )}
+                          </div>
+                          <p className="text-xs text-fuchsia-400 font-mono">ID: {recruit.creator?.id}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <button onClick={() => handleLike(recruit.id, recruit.creator.id)} className={`px-3 py-1.5 rounded text-xs font-bold transition-all border flex items-center gap-1 ${likedIds.includes(recruit.id) ? 'bg-red-900/40 text-red-400 border-red-500/50' : 'bg-transparent text-gray-400 border-gray-600 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/50'}`}>
+                          {likedIds.includes(recruit.id) ? '❤️ 已赞' : '🤍 点赞'}
+                        </button>
+                        {userProfile && userProfile.id !== recruit.creator?.id && (
+                          <button onClick={() => handleFollow(recruit.creator.id)} className={`px-3 py-1.5 rounded text-xs font-bold transition-all border ${followedIds.includes(recruit.creator.id) ? 'bg-cyan-900/40 text-cyan-400 border-cyan-500/50' : 'bg-transparent text-blue-400 border-blue-500/50 hover:bg-blue-500/20'}`}>
+                            {followedIds.includes(recruit.creator.id) ? '已关注' : '+ 关注'}
+                          </button>
+                        )}
                       </div>
                     </div>
+                  </div>
 
-                    <div className="flex gap-2">
-                      <button onClick={() => handleLike(recruit.id, recruit.creator.id)} className={`px-3 py-1.5 rounded text-xs font-bold transition-all border flex items-center gap-1 ${likedIds.includes(recruit.id) ? 'bg-red-900/40 text-red-400 border-red-500/50' : 'bg-transparent text-gray-400 border-gray-600 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/50'}`}>
-                        {likedIds.includes(recruit.id) ? '❤️ 已赞' : '🤍 点赞'}
-                      </button>
-                      {userProfile && userProfile.id !== recruit.creator?.id && (
-                        <button onClick={() => handleFollow(recruit.creator.id)} className={`px-3 py-1.5 rounded text-xs font-bold transition-all border ${followedIds.includes(recruit.creator.id) ? 'bg-cyan-900/40 text-cyan-400 border-cyan-500/50' : 'bg-transparent text-blue-400 border-blue-500/50 hover:bg-blue-500/20'}`}>
-                          {followedIds.includes(recruit.creator.id) ? '已关注' : '+ 关注'}
-                        </button>
-                      )}
-                    </div>
+                  <div className="flex border-t border-blue-500/30 bg-[#050B14]/80 divide-x divide-blue-500/30">
+                    <button onClick={() => openComments(recruit)} className="flex-1 py-3.5 text-cyan-400 text-sm font-bold hover:bg-cyan-500/10 transition">💬 查看留言</button>
+                    <button onClick={() => router.push(`/messages?target=${recruit.creator.id}`)} className="flex-1 py-3.5 text-blue-400 text-sm font-bold hover:bg-blue-500/10 transition">✉️ 发送私信</button>
                   </div>
                 </div>
-
-                <div className="flex border-t border-blue-500/30 bg-[#050B14]/80 divide-x divide-blue-500/30">
-                  <button onClick={() => openComments(recruit)} className="flex-1 py-3.5 text-cyan-400 text-sm font-bold hover:bg-cyan-500/10 transition">💬 查看留言</button>
-                  <button onClick={() => router.push(`/messages?target=${recruit.creator.id}`)} className="flex-1 py-3.5 text-blue-400 text-sm font-bold hover:bg-blue-500/10 transition">✉️ 发送私信</button>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </main>
       </div>

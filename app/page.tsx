@@ -93,8 +93,6 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-[#050B14] text-gray-200 relative overflow-hidden font-sans">
-      
-      {/* 深空科技背景特效 (加了一点青色发红光晕) */}
       <div className="absolute top-0 left-1/4 w-[50vw] h-[50vw] bg-cyan-600/10 rounded-full blur-[150px] pointer-events-none"></div>
       <div className="absolute bottom-0 right-1/4 w-[40vw] h-[40vw] bg-fuchsia-600/10 rounded-full blur-[150px] pointer-events-none"></div>
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#1f293733_1px,transparent_1px),linear-gradient(to_bottom,#1f293733_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none"></div>
@@ -103,7 +101,6 @@ export default function HomePage() {
         <Navbar />
 
         <main className="max-w-[1400px] mx-auto p-4 md:p-6 pt-8">
-          {/* Banner 加了发光动画 */}
           <div className="w-full flex justify-center mb-12 relative">
             <img src="/banner.png" alt="Wingman Games" className="w-full max-w-4xl object-contain drop-shadow-[0_0_30px_rgba(6,182,212,0.6)] animate-pulse-glow rounded-2xl" />
           </div>
@@ -190,20 +187,21 @@ export default function HomePage() {
                             <div className="absolute inset-0 flex items-center justify-center bg-[url('/logo.png')] bg-center bg-no-repeat bg-contain opacity-20 grayscale"></div>
                           )}
                           
-                          {/* 顶部光效角标 */}
                           <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-cyan-500 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                          
-                          {/* 悬浮时的扫描线特效 */}
                           <div className="absolute top-0 left-0 w-full h-[2px] bg-cyan-400/50 shadow-[0_0_15px_rgba(6,182,212,1)] -translate-y-full group-hover:animate-[scan_2s_ease-in-out_infinite]"></div>
                         </div>
                         
                         <div className="p-5 relative bg-gradient-to-t from-[#0A111F] to-[#0A111F]/90">
                           <div className="relative z-10">
                             <h3 className="font-black text-xl text-white mb-1 group-hover:text-cyan-400 transition-colors tracking-wide truncate">{game.name}</h3>
-                            <p className="text-xs text-gray-500 font-mono truncate">CREATOR: <span className="text-blue-400 font-bold">{game.creator?.nickname || 'UNKNOWN'}</span></p>
+                            <div className="text-xs text-gray-500 font-mono truncate flex items-center gap-1">
+                              CREATOR: 
+                              <span className="text-blue-400 font-bold">{game.creator?.nickname || 'UNKNOWN'}</span>
+                              {/* 🌟 荣誉徽章：首个创建者 */}
+                              <span className="text-[9px] bg-yellow-500/20 text-yellow-400 border border-yellow-500/50 px-1.5 py-0.5 rounded shadow-[0_0_8px_rgba(250,204,21,0.4)]">⚡ 先锋</span>
+                            </div>
                           </div>
                           
-                          {/* 底部小圆点装饰 */}
                           <div className="absolute bottom-2 right-4 flex gap-1 opacity-30 group-hover:opacity-100 transition-opacity">
                             <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full"></span>
                             <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full"></span>
@@ -220,7 +218,7 @@ export default function HomePage() {
         </main>
       </div>
 
-      {/* 创建游戏弹窗 (加上了磨砂玻璃和更亮的光影) */}
+      {/* 创建游戏弹窗 */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-[#0A111F]/95 border border-cyan-500/50 rounded-2xl p-8 w-full max-w-md shadow-[0_0_50px_rgba(6,182,212,0.3)] relative overflow-hidden">
