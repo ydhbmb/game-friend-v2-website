@@ -31,7 +31,16 @@ export default function Navbar() {
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
       const { data } = await supabase.from('users_profile').select('*').eq('auth_id', user.id).single()
-      if (data) setUserProfile(data)
+      if (data) {
+        // 🔥 全站封禁拦截
+        if (data.banned_until && new Date(data.banned_until) > new Date()) {
+          alert('您已经被巡游天官发现您的违禁行为，禁止进入！')
+          await supabase.auth.signOut()
+          window.location.href = '/login'
+          return
+        }
+        setUserProfile(data)
+      }
     }
     setLoading(false)
   }
@@ -53,7 +62,6 @@ export default function Navbar() {
     }
   }
 
-  // 登录/注册页不显示导航栏
   if (pathname === '/login' || pathname === '/register') return null
 
   const levelInfo = userProfile ? calculateLevel(userProfile.experience || 0, userProfile.id) : null
@@ -63,7 +71,7 @@ export default function Navbar() {
       <div className="flex items-center gap-2 md:gap-4">
         <Link href="/" className="flex items-center gap-2 group">
           <img src="/logo.png" alt="Wingman" className="w-8 h-8 md:w-10 md:h-10 object-contain drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]" />
-          <span className="text-lg md:text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 hidden sm:block tracking-widest">Wingman Games</span>
+          <span className="text-lg md:text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 hidden sm:block tracking-widest font-orbitron">Wingman Games</span>
         </Link>
 
         {userProfile && (

@@ -20,6 +20,11 @@ export default function AdminPage() {
   const [gamesList, setGamesList] = useState<any[]>([])
   const [recruitsList, setRecruitsList] = useState<any[]>([])
 
+  // 搜索状态
+  const [userSearch, setUserSearch] = useState('')
+  const [gameSearch, setGameSearch] = useState('')
+  const [recruitSearch, setRecruitSearch] = useState('')
+
   // 管理员白名单
   const adminIds = [1, 10000, 11111, 22222, 33333, 44444, 55555, 66666, 77777, 88888, 99999]
 
@@ -50,14 +55,12 @@ export default function AdminPage() {
   }, [router])
 
   async function fetchData() {
-    // 获取统计数据
     const { count: userCount } = await supabase.from('users_profile').select('*', { count: 'exact', head: true })
     const { count: gameCount } = await supabase.from('games').select('*', { count: 'exact', head: true })
     const { count: recruitCount } = await supabase.from('recruits').select('*', { count: 'exact', head: true })
     setStats({ users: userCount || 0, games: gameCount || 0, recruits: recruitCount || 0 })
 
-    // 获取详细列表
-    const { data: uData } = await supabase.from('users_profile').select('*').order('id', { ascending: true }).limit(100)
+    const { data: uData } = await supabase.from('users_profile').select('*').order('id', { ascending: true })
     if (uData) setUsersList(uData)
 
     const { data: gData } = await supabase.from('games').select(`*, creator:users_profile(nickname)`).order('created_at', { ascending: false })
@@ -73,19 +76,48 @@ export default function AdminPage() {
     if (newExpStr === null) return
     const newExp = parseInt(newExpStr)
     if (isNaN(newExp) || newExp < 0) return alert('请输入合法数字')
-
     await supabase.from('users_profile').update({ experience: newExp }).eq('id', userId)
     fetchData()
   }
 
-  // 删除游戏
+  // 封禁/解封用户
+  async function handleBanUser(user: any) {
+    if (adminIds.includes(user.id)) return alert('你不能封禁神权管理员！')
+    
+    // 检查是否已经被封
+    const isBanned = user.banned_until && new Date(user.banned_until) > new Date()
+    
+    if (isBanned) {
+      if (confirm('该用户正处于封禁状态，是否解除封禁？')) {
+        await supabase.from('users_profile').update({ banned_until: null }).eq('id', user.id)
+        fetchData()
+      }
+      return
+    }
+
+    const days = prompt(`请输入封禁天数（1 / 3 / 7 / 30 / 365），输入 99999 代表永久封禁：`)
+    if (days === null) return
+    const numDays = parseInt(days)
+    if (isNaN(numDays) || numDays <= 0) return alert('天数不合法')
+
+    let banDate = new Date()
+    if (numDays >= 99999) {
+      banDate.setFullYear(2099) // 永久
+    } else {
+      banDate.setDate(banDate.getDate() + numDays)
+    }
+
+    await supabase.from('users_profile').update({ banned_until: banDate.toISOString() }).eq('id', user.id)
+    fetchData()
+    alert('封禁执行完毕！')
+  }
+
   async function handleDeleteGame(gameId: number) {
     if (!confirm('⚠️ 最高警告：确定要删除该游戏及所有相关数据吗？')) return
     await supabase.from('games').delete().eq('id', gameId)
     fetchData()
   }
 
-  // 删除悬赏令
   async function handleDeleteRecruit(recruitId: number) {
     if (!confirm('⚠️ 确定要清除这条违规悬赏令吗？')) return
     await supabase.from('recruits').delete().eq('id', recruitId)
@@ -94,6 +126,18 @@ export default function AdminPage() {
 
   if (loading) return <div className="min-h-screen bg-[#050B14] flex items-center justify-center text-cyan-500 font-orbitron animate-pulse">验证神权身份中...</div>
   if (!isAdmin) return null
+
+  // 前端搜索过滤
+  const filteredUsers = usersList.filter(u => 
+    u.nickname?.toLowerCase().includes(userSearch.toLowerCase()) || 
+    u.id.toString().includes(userSearch) ||
+    u.email?.toLowerCase().includes(userSearch.toLowerCase())
+  )
+  const filteredGames = gamesList.filter(g => g.name.toLowerCase().includes(gameSearch.toLowerCase()))
+  const filteredRecruits = recruitsList.filter(r => 
+    r.play_content.toLowerCase().includes(recruitSearch.toLowerCase()) ||
+    r.games?.name.toLowerCase().includes(recruitSearch.toLowerCase())
+  )
 
   return (
     <div className="min-h-screen bg-[#050B14] text-gray-200 flex overflow-hidden">
@@ -104,22 +148,14 @@ export default function AdminPage() {
           <h1 className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-500 to-red-500 font-orbitron tracking-widest">
             神权控制台
           </h1>
-          <p className="text-xs text-gray-500 mt-2">欢迎，{userProfile.nickname}</p>
+          <p className="text-xs text-gray-500 mt-2">巡游天官: {userProfile.nickname}</p>
         </div>
         
         <nav className="flex-1 p-4 space-y-2">
-          <button onClick={() => setActiveTab('overview')} className={`w-full text-left px-4 py-3 rounded-xl font-bold transition-all ${activeTab === 'overview' ? 'bg-cyan-600 text-white shadow-[0_0_15px_rgba(6,182,212,0.5)]' : 'text-gray-400 hover:bg-gray-800'}`}>
-            📊 数据总览
-          </button>
-          <button onClick={() => setActiveTab('users')} className={`w-full text-left px-4 py-3 rounded-xl font-bold transition-all ${activeTab === 'users' ? 'bg-cyan-600 text-white shadow-[0_0_15px_rgba(6,182,212,0.5)]' : 'text-gray-400 hover:bg-gray-800'}`}>
-            👥 用户管理
-          </button>
-          <button onClick={() => setActiveTab('games')} className={`w-full text-left px-4 py-3 rounded-xl font-bold transition-all ${activeTab === 'games' ? 'bg-cyan-600 text-white shadow-[0_0_15px_rgba(6,182,212,0.5)]' : 'text-gray-400 hover:bg-gray-800'}`}>
-            🎮 游戏模块
-          </button>
-          <button onClick={() => setActiveTab('recruits')} className={`w-full text-left px-4 py-3 rounded-xl font-bold transition-all ${activeTab === 'recruits' ? 'bg-cyan-600 text-white shadow-[0_0_15px_rgba(6,182,212,0.5)]' : 'text-gray-400 hover:bg-gray-800'}`}>
-            🚨 悬赏通缉
-          </button>
+          <button onClick={() => setActiveTab('overview')} className={`w-full text-left px-4 py-3 rounded-xl font-bold transition-all ${activeTab === 'overview' ? 'bg-cyan-600 text-white shadow-[0_0_15px_rgba(6,182,212,0.5)]' : 'text-gray-400 hover:bg-gray-800'}`}>📊 数据总览</button>
+          <button onClick={() => setActiveTab('users')} className={`w-full text-left px-4 py-3 rounded-xl font-bold transition-all ${activeTab === 'users' ? 'bg-cyan-600 text-white shadow-[0_0_15px_rgba(6,182,212,0.5)]' : 'text-gray-400 hover:bg-gray-800'}`}>👥 用户管理</button>
+          <button onClick={() => setActiveTab('games')} className={`w-full text-left px-4 py-3 rounded-xl font-bold transition-all ${activeTab === 'games' ? 'bg-cyan-600 text-white shadow-[0_0_15px_rgba(6,182,212,0.5)]' : 'text-gray-400 hover:bg-gray-800'}`}>🎮 游戏模块</button>
+          <button onClick={() => setActiveTab('recruits')} className={`w-full text-left px-4 py-3 rounded-xl font-bold transition-all ${activeTab === 'recruits' ? 'bg-cyan-600 text-white shadow-[0_0_15px_rgba(6,182,212,0.5)]' : 'text-gray-400 hover:bg-gray-800'}`}>🚨 悬赏通缉</button>
         </nav>
 
         <div className="p-4 border-t border-gray-800">
@@ -155,33 +191,48 @@ export default function AdminPage() {
         {/* 2. 用户管理 */}
         {activeTab === 'users' && (
           <div className="relative z-10">
-            <h2 className="text-3xl font-black text-white font-orbitron mb-8">用户权限与经验管理</h2>
+            <div className="flex justify-between items-center mb-8">
+              <h2 className="text-3xl font-black text-white font-orbitron">用户权限与封禁</h2>
+              <input type="text" placeholder="搜索 ID / 昵称 / 邮箱..." value={userSearch} onChange={e => setUserSearch(e.target.value)} className="bg-[#0A111F] border border-cyan-900/50 text-white px-4 py-2 rounded-xl outline-none focus:border-cyan-500 w-64" />
+            </div>
+            
             <div className="bg-[#0A111F] border border-gray-800 rounded-2xl overflow-hidden">
               <table className="w-full text-left text-sm">
                 <thead className="bg-black/50 text-cyan-400 font-mono">
                   <tr>
                     <th className="p-4">ID</th>
-                    <th className="p-4">昵称</th>
-                    <th className="p-4">经验值</th>
+                    <th className="p-4">用户</th>
+                    <th className="p-4">经验</th>
+                    <th className="p-4">状态</th>
                     <th className="p-4">操作</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-800">
-                  {usersList.map(u => (
-                    <tr key={u.id} className="hover:bg-white/5 transition">
-                      <td className="p-4 font-mono font-bold">{u.id}</td>
-                      <td className="p-4 flex items-center gap-2">
-                        <img src={u.avatar_url || '/logo.png'} className="w-6 h-6 rounded-full" />
-                        {u.nickname}
-                      </td>
-                      <td className="p-4 text-cyan-400 font-bold">{u.experience || 0}</td>
-                      <td className="p-4">
-                        <button onClick={() => handleUpdateExp(u.id, u.experience || 0)} className="text-xs bg-gray-800 border border-gray-600 px-3 py-1.5 rounded hover:bg-gray-700">修改经验</button>
-                      </td>
-                    </tr>
-                  ))}
+                  {filteredUsers.map(u => {
+                    const isBanned = u.banned_until && new Date(u.banned_until) > new Date()
+                    return (
+                      <tr key={u.id} className="hover:bg-white/5 transition">
+                        <td className="p-4 font-mono font-bold">{u.id}</td>
+                        <td className="p-4 flex items-center gap-2">
+                          <img src={u.avatar_url || '/logo.png'} className="w-6 h-6 rounded-full" />
+                          {u.nickname}
+                        </td>
+                        <td className="p-4 text-cyan-400 font-bold">{u.experience || 0}</td>
+                        <td className="p-4">
+                          {isBanned ? <span className="text-red-500 font-bold">已封禁</span> : <span className="text-green-500">正常</span>}
+                        </td>
+                        <td className="p-4 flex gap-2">
+                          <button onClick={() => handleUpdateExp(u.id, u.experience || 0)} className="text-xs bg-gray-800 border border-gray-600 px-3 py-1.5 rounded hover:bg-gray-700">改经验</button>
+                          <button onClick={() => handleBanUser(u)} className={`text-xs border px-3 py-1.5 rounded ${isBanned ? 'bg-green-900/20 text-green-400 border-green-600' : 'bg-red-900/20 text-red-500 border-red-600'}`}>
+                            {isBanned ? '解封' : '封禁'}
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
+              {filteredUsers.length === 0 && <p className="p-6 text-center text-gray-500">没有找到用户</p>}
             </div>
           </div>
         )}
@@ -189,9 +240,12 @@ export default function AdminPage() {
         {/* 3. 游戏模块管理 */}
         {activeTab === 'games' && (
           <div className="relative z-10">
-            <h2 className="text-3xl font-black text-white font-orbitron mb-8">游戏模块清理</h2>
+            <div className="flex justify-between items-center mb-8">
+              <h2 className="text-3xl font-black text-white font-orbitron">游戏模块清理</h2>
+              <input type="text" placeholder="搜索游戏名..." value={gameSearch} onChange={e => setGameSearch(e.target.value)} className="bg-[#0A111F] border border-cyan-900/50 text-white px-4 py-2 rounded-xl outline-none focus:border-cyan-500 w-64" />
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {gamesList.map(g => (
+              {filteredGames.map(g => (
                 <div key={g.id} className="bg-[#0A111F] border border-gray-800 p-4 rounded-xl flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <img src={g.cover_url || '/logo.png'} className="w-10 h-10 rounded object-cover" />
@@ -203,6 +257,7 @@ export default function AdminPage() {
                   <button onClick={() => handleDeleteGame(g.id)} className="text-red-500 bg-red-900/20 p-2 rounded hover:bg-red-900/50">🗑️</button>
                 </div>
               ))}
+              {filteredGames.length === 0 && <p className="col-span-full text-gray-500">没有找到模块</p>}
             </div>
           </div>
         )}
@@ -210,9 +265,12 @@ export default function AdminPage() {
         {/* 4. 悬赏令管理 */}
         {activeTab === 'recruits' && (
           <div className="relative z-10">
-            <h2 className="text-3xl font-black text-white font-orbitron mb-8">违规悬赏清理</h2>
+            <div className="flex justify-between items-center mb-8">
+              <h2 className="text-3xl font-black text-white font-orbitron">违规悬赏清理</h2>
+              <input type="text" placeholder="搜索悬赏内容 / 游戏名..." value={recruitSearch} onChange={e => setRecruitSearch(e.target.value)} className="bg-[#0A111F] border border-cyan-900/50 text-white px-4 py-2 rounded-xl outline-none focus:border-cyan-500 w-64" />
+            </div>
             <div className="space-y-3">
-              {recruitsList.map(r => (
+              {filteredRecruits.map(r => (
                 <div key={r.id} className="bg-[#0A111F] border border-gray-800 p-4 rounded-xl flex items-center justify-between">
                   <div>
                     <p className="font-bold text-white">{r.play_content}</p>
@@ -221,6 +279,7 @@ export default function AdminPage() {
                   <button onClick={() => handleDeleteRecruit(r.id)} className="text-red-500 bg-red-900/20 p-2 rounded hover:bg-red-900/50">🗑️ 删除</button>
                 </div>
               ))}
+              {filteredRecruits.length === 0 && <p className="text-gray-500">没有找到通缉令</p>}
             </div>
           </div>
         )}
