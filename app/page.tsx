@@ -101,8 +101,20 @@ export default function HomePage() {
         <Navbar />
 
         <main className="max-w-[1400px] mx-auto p-4 md:p-6 pt-8">
-          <div className="w-full flex justify-center mb-12 relative">
+          <div className="w-full flex justify-center mb-8 md:mb-12 relative">
             <img src="/banner.png" alt="Wingman Games" className="w-full max-w-4xl object-contain drop-shadow-[0_0_30px_rgba(6,182,212,0.6)] animate-pulse-glow rounded-2xl" />
+          </div>
+
+          {/* 战队大厅入口 */}
+          <div className="mb-8 w-full max-w-4xl mx-auto">
+            <Link href="/teams" className="group relative flex items-center justify-between p-6 bg-gradient-to-r from-cyan-900/40 to-blue-900/40 border border-cyan-500/30 rounded-2xl hover:border-cyan-400 transition-all shadow-[0_0_20px_rgba(6,182,212,0.2)] hover:shadow-[0_0_30px_rgba(6,182,212,0.4)] overflow-hidden">
+              <div className="absolute inset-0 bg-[url('/logo.png')] bg-right bg-no-repeat bg-contain opacity-5 pointer-events-none group-hover:scale-110 transition-transform"></div>
+              <div className="relative z-10">
+                <h2 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400 font-orbitron mb-1">战队大厅</h2>
+                <p className="text-sm text-cyan-500/70 font-mono">// 加入公会，寻找你的最强战队</p>
+              </div>
+              <div className="relative z-10 text-cyan-400 group-hover:translate-x-2 transition-transform text-2xl">→</div>
+            </Link>
           </div>
 
           <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
@@ -197,7 +209,6 @@ export default function HomePage() {
                             <div className="text-xs text-gray-500 font-mono truncate flex items-center gap-1">
                               CREATOR: 
                               <span className="text-blue-400 font-bold">{game.creator?.nickname || 'UNKNOWN'}</span>
-                              {/* 🌟 荣誉徽章：首个创建者 */}
                               <span className="text-[9px] bg-yellow-500/20 text-yellow-400 border border-yellow-500/50 px-1.5 py-0.5 rounded shadow-[0_0_8px_rgba(250,204,21,0.4)]">⚡ 先锋</span>
                             </div>
                           </div>
