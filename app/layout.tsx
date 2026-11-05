@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import FeedbackButton from "@/components/FeedbackButton";
 
 export const metadata: Metadata = {
   title: "Wingman Games - 找到你的最佳游戏搭子",
@@ -15,6 +16,7 @@ export default function RootLayout({
     <html lang="zh-CN">
       <body className="antialiased">
         {children}
+        <FeedbackButton />
       </body>
     </html>
   );
