@@ -22,6 +22,9 @@ function GameDetailContent() {
   const [playContent, setPlayContent] = useState('')
   const [onlineTime, setOnlineTime] = useState('')
   const [personality, setPersonality] = useState('')
+  // 🔥 新增：平台和区服状态
+  const [platform, setPlatform] = useState('')
+  const [serverRegion, setServerRegion] = useState('')
   const [postMsg, setPostMsg] = useState('')
 
   const [activeRecruit, setActiveRecruit] = useState<any>(null)
@@ -42,13 +45,10 @@ function GameDetailContent() {
           const { data } = await supabase.from('users_profile').select('*').eq('auth_id', user.id).single()
           if (data) {
             setUserProfile(data)
-            // 获取关注的人
             const { data: followsData } = await supabase.from('follows').select('following_id').eq('follower_id', data.id)
             if (followsData) setFollowedIds(followsData.map(f => f.following_id))
-            // 获取点赞记录
             const { data: likesData } = await supabase.from('likes').select('recruit_id').eq('user_id', data.id)
             if (likesData) setLikedIds(likesData.map(l => l.recruit_id))
-            // 获取是否关注了游戏
             const { data: gameFollowData } = await supabase.from('game_follows').select('id').eq('user_id', data.id).eq('game_id', gameId).single()
             if (gameFollowData) setIsFollowingGame(true)
           }
@@ -75,7 +75,6 @@ function GameDetailContent() {
     if (data) setRecruits(data)
   }
 
-  // 关注游戏逻辑
   async function toggleFollowGame() {
     if (!userProfile) return alert('请先登录！')
     try {
@@ -153,24 +152,29 @@ function GameDetailContent() {
   }
 
   async function handlePostRecruit() {
-    if (!playContent || !onlineTime) return setPostMsg('主玩内容和上线时间是必填项')
+    if (!playContent || !onlineTime || !platform || !serverRegion) {
+      return setPostMsg('请填写完整：主玩内容、在线时间、游戏平台和区服')
+    }
     if (!userProfile) return setPostMsg('请先登录！')
 
-    // 1. 插入悬赏令
     const { error } = await supabase.from('recruits').insert({
-      game_id: gameId, creator_id: userProfile.id, play_content: playContent, online_time: onlineTime, personality: personality
+      game_id: gameId, 
+      creator_id: userProfile.id, 
+      play_content: playContent, 
+      online_time: onlineTime, 
+      personality: personality,
+      platform: platform,
+      server_region: serverRegion
     })
 
     if (error) {
       setPostMsg('发布失败：' + error.message)
     } else {
-      // 2. 发帖加经验
       const today = new Date().toISOString().split('T')[0]
       if (userProfile.last_recruit_at !== today) {
         await supabase.from('users_profile').update({ experience: (userProfile.experience || 0) + 1, last_recruit_at: today }).eq('id', userProfile.id)
       }
 
-      // 🔥 3. 给所有关注了该游戏的玩家发通知（排除自己）
       const { data: followers } = await supabase.from('game_follows').select('user_id').eq('game_id', gameId).neq('user_id', userProfile.id)
       if (followers && followers.length > 0) {
         const notifications = followers.map(f => ({
@@ -183,7 +187,7 @@ function GameDetailContent() {
         await supabase.from('notifications').insert(notifications)
       }
 
-      setIsPosting(false); setPlayContent(''); setOnlineTime(''); setPersonality(''); setPostMsg(''); fetchRecruits()
+      setIsPosting(false); setPlayContent(''); setOnlineTime(''); setPersonality(''); setPlatform(''); setServerRegion(''); setPostMsg(''); fetchRecruits()
     }
   }
 
@@ -271,7 +275,6 @@ function GameDetailContent() {
         </div>
 
         <main className="max-w-4xl mx-auto px-4 md:px-6 -mt-10 relative z-20">
-          {/* 顶部操作区 */}
           <div className="flex flex-wrap justify-center gap-4 mb-8">
             <button onClick={() => setIsPosting(true)} className="bg-blue-600 text-white px-8 py-3.5 rounded-xl font-black shadow-[0_0_20px_rgba(37,99,235,0.5)] hover:bg-blue-500 hover:scale-105 transition-all flex items-center gap-2 tracking-widest font-orbitron">
               <span className="text-xl">🚨</span> 发布招募通缉令
@@ -307,6 +310,9 @@ function GameDetailContent() {
 
                     <div className="space-y-3 font-medium text-gray-300 mb-8 text-[15px]">
                       <p className="flex items-start gap-2"><span className="text-cyan-500 font-bold shrink-0">主玩内容：</span><span className="line-clamp-2 text-white">{recruit.play_content}</span></p>
+                      {/* 🔥 新增：平台和区服的展示 */}
+                      <p className="flex items-start gap-2"><span className="text-cyan-500 font-bold shrink-0">游戏平台：</span><span className="text-blue-300">{recruit.platform}</span></p>
+                      <p className="flex items-start gap-2"><span className="text-cyan-500 font-bold shrink-0">大区/区服：</span><span className="text-blue-300">{recruit.server_region}</span></p>
                       <p className="flex items-start gap-2"><span className="text-cyan-500 font-bold shrink-0">在线时间：</span><span className="text-cyan-100">{recruit.online_time}</span></p>
                       {recruit.personality && <p className="flex items-start gap-2"><span className="text-cyan-500 font-bold shrink-0">战术要求：</span><span className="line-clamp-3 text-gray-400">{recruit.personality}</span></p>}
                     </div>
@@ -349,17 +355,34 @@ function GameDetailContent() {
         </main>
       </div>
 
+      {/* 发布招募弹窗 (新增了平台和区服的输入) */}
       {isPosting && (
         <div className="fixed inset-0 bg-[#050B14]/90 backdrop-blur-md flex items-center justify-center z-50 p-4">
           <div className="bg-[#0A111F] border border-cyan-500/50 rounded-2xl p-6 md:p-8 w-full max-w-md shadow-[0_0_30px_rgba(6,182,212,0.2)]">
             <h3 className="text-xl md:text-2xl font-black mb-6 text-white text-center tracking-widest font-orbitron">发布赛博通缉令</h3>
+            
             <label className="block text-xs font-bold text-cyan-500 mb-1">主玩内容 *</label>
             <input className="w-full bg-[#050B14] border border-cyan-900/50 rounded-lg px-4 py-2.5 mb-4 text-white outline-none focus:border-cyan-500" placeholder="如：大乱斗 / 排位上分" value={playContent} onChange={(e) => setPlayContent(e.target.value)} />
+            
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-xs font-bold text-cyan-500 mb-1">游戏平台 *</label>
+                <input className="w-full bg-[#050B14] border border-cyan-900/50 rounded-lg px-4 py-2.5 text-white outline-none focus:border-cyan-500" placeholder="如：PC / 手游 / 主机" value={platform} onChange={(e) => setPlatform(e.target.value)} />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-cyan-500 mb-1">大区/区服 *</label>
+                <input className="w-full bg-[#050B14] border border-cyan-900/50 rounded-lg px-4 py-2.5 text-white outline-none focus:border-cyan-500" placeholder="如：电一 / 亚服" value={serverRegion} onChange={(e) => setServerRegion(e.target.value)} />
+              </div>
+            </div>
+
             <label className="block text-xs font-bold text-cyan-500 mb-1">在线时间 *</label>
             <input className="w-full bg-[#050B14] border border-cyan-900/50 rounded-lg px-4 py-2.5 mb-4 text-white outline-none focus:border-cyan-500" placeholder="如：每晚 20:00 - 23:00" value={onlineTime} onChange={(e) => setOnlineTime(e.target.value)} />
+            
             <label className="block text-xs font-bold text-cyan-500 mb-1">战术要求 (选填)</label>
             <textarea className="w-full bg-[#050B14] border border-cyan-900/50 rounded-lg px-4 py-2.5 mb-4 text-white outline-none focus:border-cyan-500 h-24 resize-none" placeholder="如：脾气好，不压力队友..." value={personality} onChange={(e) => setPersonality(e.target.value)} />
+            
             {postMsg && <p className="text-red-500 text-sm mb-4 text-center">{postMsg}</p>}
+            
             <div className="flex gap-3 mt-6">
               <button onClick={() => setIsPosting(false)} className="flex-1 bg-gray-800 text-gray-300 py-3 rounded-lg font-bold hover:bg-gray-700">取消</button>
               <button onClick={handlePostRecruit} className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-500 shadow-[0_0_15px_rgba(37,99,235,0.4)]">确认发布</button>
@@ -368,6 +391,7 @@ function GameDetailContent() {
         </div>
       )}
 
+      {/* 评论弹窗保持不变 */}
       {activeRecruit && (
         <div className="fixed inset-0 bg-[#050B14]/90 backdrop-blur-md flex items-center justify-center z-50 p-4">
           <div className="bg-[#0A111F] border border-cyan-500/50 rounded-2xl w-full max-w-lg shadow-[0_0_30px_rgba(6,182,212,0.2)] flex flex-col h-[80vh] max-h-[600px] overflow-hidden">
