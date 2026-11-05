@@ -73,9 +73,9 @@ export default function NotificationsPage() {
                   </div>
                 </div>
                 
-                {/* 如果是新招募通知，加上直接前往按钮 */}
+                {/* 🔥 核心改动：跳转链接改为 ?id= */}
                 {n.type === 'new_recruit' && n.related_id && (
-                  <Link href={`/game/${n.related_id}`} className="text-xs bg-cyan-600/20 text-cyan-400 border border-cyan-500/50 px-3 py-1.5 rounded-lg hover:bg-cyan-600 hover:text-white transition whitespace-nowrap">
+                  <Link href={`/game?id=${n.related_id}`} className="text-xs bg-cyan-600/20 text-cyan-400 border border-cyan-500/50 px-3 py-1.5 rounded-lg hover:bg-cyan-600 hover:text-white transition whitespace-nowrap">
                     去围观 →
                   </Link>
                 )}

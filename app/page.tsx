@@ -10,7 +10,7 @@ export default function HomePage() {
   const [userProfile, setUserProfile] = useState<any>(null)
   const [games, setGames] = useState<any[]>([])
   const [leaderboard, setLeaderboard] = useState<any[]>([]) 
-  const [followedGameIds, setFollowedGameIds] = useState<number[]>([]) // 记录关注的游戏
+  const [followedGameIds, setFollowedGameIds] = useState<number[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   
@@ -23,7 +23,6 @@ export default function HomePage() {
   
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // 判断是否是最高权限管理员
   const isAdmin = (uid: number) => {
     const admins = [1, 10000, 11111, 22222, 33333, 44444, 55555, 66666, 77777, 88888, 99999]
     return admins.includes(uid)
@@ -37,7 +36,6 @@ export default function HomePage() {
           const { data } = await supabase.from('users_profile').select('*').eq('auth_id', user.id).single()
           if (data) {
             setUserProfile(data)
-            // 获取当前用户关注了哪些游戏
             const { data: followsData } = await supabase.from('game_follows').select('game_id').eq('user_id', data.id)
             if (followsData) setFollowedGameIds(followsData.map(f => f.game_id))
           }
@@ -73,10 +71,9 @@ export default function HomePage() {
     } catch (err) {}
   }
 
-  // 关注/取消关注游戏
   async function toggleFollowGame(gameId: number, e: React.MouseEvent) {
-    e.preventDefault() // 阻止跳转到详情页
-    e.stopPropagation() // 阻止事件冒泡
+    e.preventDefault()
+    e.stopPropagation()
     if (!userProfile) return alert('请先登录！')
 
     try {
@@ -123,7 +120,6 @@ export default function HomePage() {
     }
   }
 
-  // 管理员操作：改名 & 删除
   async function handleUpdateName(gameId: number, oldName: string) {
     const newName = prompt('请输入新的游戏模块名称：', oldName)
     if (!newName || newName.trim() === '' || newName === oldName) return
@@ -164,7 +160,6 @@ export default function HomePage() {
             <img src="/banner.png" alt="Wingman Games" className="w-full max-w-4xl object-contain drop-shadow-[0_0_30px_rgba(6,182,212,0.6)] animate-pulse-glow rounded-2xl" />
           </div>
 
-          {/* 战队大厅入口 */}
           <div className="mb-8 w-full max-w-4xl mx-auto">
             <Link href="/teams" className="group relative flex items-center justify-between p-6 bg-gradient-to-r from-cyan-900/40 to-blue-900/40 border border-cyan-500/30 rounded-2xl hover:border-cyan-400 transition-all shadow-[0_0_20px_rgba(6,182,212,0.2)] hover:shadow-[0_0_30px_rgba(6,182,212,0.4)] overflow-hidden">
               <div className="absolute inset-0 bg-[url('/logo.png')] bg-right bg-no-repeat bg-contain opacity-5 pointer-events-none group-hover:scale-110 transition-transform"></div>
@@ -177,8 +172,6 @@ export default function HomePage() {
           </div>
 
           <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
-            
-            {/* 左侧：排行榜面板 */}
             <div className="w-full lg:w-1/4 flex-shrink-0">
               <div className="bg-[#0A111F]/90 backdrop-blur-xl border border-cyan-900/50 rounded-2xl p-5 shadow-[0_0_30px_rgba(0,0,0,0.5)] lg:sticky lg:top-24 transition-all duration-300 hover:border-cyan-500/50">
                 <div className="flex items-center gap-2 mb-4 md:mb-6 border-b border-cyan-900/50 pb-3 md:pb-4">
@@ -228,7 +221,6 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* 右侧：游戏大厅 */}
             <div className="w-full lg:w-3/4">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 md:mb-8">
                 <h2 className="text-2xl md:text-3xl font-black text-white tracking-wider flex items-center gap-3 font-orbitron">
@@ -250,7 +242,8 @@ export default function HomePage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5 md:gap-8">
                   {games.map(game => (
                     <div key={game.id} className="relative group bg-[#0A111F] rounded-2xl border border-gray-800 overflow-hidden hover:border-cyan-400 transition-all duration-500 transform hover:-translate-y-2 hover:shadow-[0_10px_40px_rgba(6,182,212,0.3)]">
-                      <Link href={`/game/${game.id}`} className="block relative z-10">
+                      {/* 🔥 核心改动：链接改为 ?id= */}
+                      <Link href={`/game?id=${game.id}`} className="block relative z-10">
                         <div className="h-40 md:h-48 w-full bg-black relative overflow-hidden flex items-center justify-center">
                           {game.cover_url ? (
                             <img src={game.cover_url} alt={game.name} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 group-hover:scale-110 transition duration-700" />
@@ -272,7 +265,6 @@ export default function HomePage() {
                             </div>
                           </div>
                           
-                          {/* 关注游戏按钮 */}
                           {userProfile && (
                             <button 
                               onClick={(e) => toggleFollowGame(game.id, e)}
@@ -288,7 +280,6 @@ export default function HomePage() {
                         </div>
                       </Link>
 
-                      {/* 管理员专属操作面板 */}
                       {userProfile && isAdmin(userProfile.id) && (
                         <div className="absolute top-3 right-3 z-20 flex gap-1 opacity-0 group-hover:opacity-100 transition-all duration-300">
                           <button onClick={(e) => { e.preventDefault(); handleUpdateName(game.id, game.name); }} className="bg-black/80 backdrop-blur border border-yellow-500/50 text-yellow-400 text-xs px-2 py-1 rounded hover:bg-yellow-500/20" title="修改名称">✏️</button>
@@ -308,14 +299,11 @@ export default function HomePage() {
         </main>
       </div>
 
-      {/* 创建游戏弹窗 */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-[#0A111F]/95 border border-cyan-500/50 rounded-2xl p-8 w-full max-w-md shadow-[0_0_50px_rgba(6,182,212,0.3)] relative overflow-hidden">
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-400 via-blue-500 to-cyan-400"></div>
-            
             <h3 className="text-2xl font-black mb-6 text-white text-center font-orbitron tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">创建游戏模块</h3>
-            
             <div className="space-y-4">
               <input className="w-full bg-[#050B14] border border-cyan-900/50 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-400" placeholder="输入游戏名称" value={newGameName} onChange={(e) => setNewGameName(e.target.value)} />
               <div onClick={() => fileInputRef.current?.click()} className="w-full h-32 border-2 border-dashed border-cyan-900/50 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-cyan-400 hover:bg-cyan-500/5 transition-all overflow-hidden">
@@ -323,14 +311,10 @@ export default function HomePage() {
               </div>
               <input type="file" className="hidden" ref={fileInputRef} onChange={handleFileChange} />
             </div>
-            
             {createMsg && <p className="text-red-400 text-sm text-center mt-4">{createMsg}</p>}
-            
             <div className="flex gap-4 mt-8">
               <button onClick={() => setIsModalOpen(false)} className="flex-1 bg-gray-800 text-gray-300 py-3 rounded-xl font-bold hover:bg-gray-700 transition">取消</button>
-              <button onClick={handleCreateGame} disabled={uploading} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-black hover:bg-blue-500 shadow-[0_0_20px_rgba(37,99,235,0.5)] transition-all">
-                {uploading ? '部署中...' : '确认创建'}
-              </button>
+              <button onClick={handleCreateGame} disabled={uploading} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-black hover:bg-blue-500 shadow-[0_0_20px_rgba(37,99,235,0.5)] transition-all">{uploading ? '部署中...' : '确认创建'}</button>
             </div>
           </div>
         </div>

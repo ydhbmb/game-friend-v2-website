@@ -2,19 +2,19 @@
 
 import { useState, useEffect, Suspense } from 'react'
 import { supabase } from '@/lib/supabase'
-import { useParams, useRouter } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import Navbar from '@/components/Navbar'
 
 function GameDetailContent() {
-  const params = useParams()
+  const searchParams = useSearchParams()
   const router = useRouter()
-  const gameId = params.id as string
+  const gameId = searchParams.get('id') 
 
   const [game, setGame] = useState<any>(null)
   const [userProfile, setUserProfile] = useState<any>(null)
   const [recruits, setRecruits] = useState<any[]>([])
-  const [followedIds, setFollowedIds] = useState<number[]>([]) // 关注的人
-  const [isFollowingGame, setIsFollowingGame] = useState(false) // 关注游戏
+  const [followedIds, setFollowedIds] = useState<number[]>([])
+  const [isFollowingGame, setIsFollowingGame] = useState(false)
   const [likedIds, setLikedIds] = useState<number[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -22,7 +22,6 @@ function GameDetailContent() {
   const [playContent, setPlayContent] = useState('')
   const [onlineTime, setOnlineTime] = useState('')
   const [personality, setPersonality] = useState('')
-  // 🔥 新增：平台和区服状态
   const [platform, setPlatform] = useState('')
   const [serverRegion, setServerRegion] = useState('')
   const [postMsg, setPostMsg] = useState('')
@@ -39,6 +38,7 @@ function GameDetailContent() {
 
   useEffect(() => {
     async function init() {
+      if (!gameId) return 
       try {
         const { data: { user } } = await supabase.auth.getUser()
         if (user) {
@@ -63,10 +63,11 @@ function GameDetailContent() {
         setLoading(false)
       }
     }
-    if (gameId) init()
+    init()
   }, [gameId])
 
   async function fetchRecruits() {
+    if (!gameId) return
     const { data } = await supabase
       .from('recruits')
       .select(`*, creator:users_profile(nickname, avatar_url, id)`)
@@ -124,7 +125,6 @@ function GameDetailContent() {
           .update({ experience: (creatorData.experience || 0) + 1 })
           .eq('id', creatorId)
           .select() 
-        
         if (creatorErr || !updatedCreator || updatedCreator.length === 0) throw new Error('给创作者加经验被数据库拦截')
       }
 
@@ -141,12 +141,9 @@ function GameDetailContent() {
 
       setLikedIds([...likedIds, recruitId])
       setUserProfile({ ...userProfile, experience: (userProfile.experience || 0) + 1, last_like_at: today, daily_like_count: currentLikeCount + 1 })
-      
       alert('点赞成功！双方各获得 1 经验！')
       window.location.reload(); 
-      
     } catch (err: any) {
-      console.error(err)
       alert('点赞失败：' + err.message)
     }
   }
@@ -182,7 +179,8 @@ function GameDetailContent() {
           actor_id: userProfile.id,
           type: 'new_recruit',
           content: `在 [${game?.name}] 发布了新招募：${playContent}`,
-          related_id: parseInt(gameId)
+          // 🔥 修复了这里的 TypeScript 类型报错
+          related_id: parseInt(gameId as string)
         }))
         await supabase.from('notifications').insert(notifications)
       }
@@ -221,9 +219,8 @@ function GameDetailContent() {
     if (!error) {
       if (activeRecruit.creator.id !== userProfile.id) {
         await supabase.from('notifications').insert({
-          user_id: activeRecruit.creator.id, actor_id: userProfile.id, type: 'comment', content: content, related_id: parseInt(gameId)
+          user_id: activeRecruit.creator.id, actor_id: userProfile.id, type: 'comment', content: content, related_id: parseInt(gameId as string)
         })
-        
         const { data: creatorData } = await supabase.from('users_profile').select('experience').eq('id', activeRecruit.creator.id).single()
         if (creatorData) {
           await supabase.from('users_profile').update({ experience: (creatorData.experience || 0) + 1 }).eq('id', activeRecruit.creator.id)
@@ -247,7 +244,6 @@ function GameDetailContent() {
           daily_comment_count: currentCommentCount + 1
         })
       }
-
       fetchComments(activeRecruit.id)
     }
   }
@@ -258,10 +254,8 @@ function GameDetailContent() {
   return (
     <div className="min-h-screen bg-[#050B14] text-gray-200 relative overflow-hidden pb-20">
       <div className="absolute top-[-10%] left-[-10%] w-[40vw] h-[40vw] bg-fuchsia-600/10 rounded-full blur-[120px] pointer-events-none"></div>
-      
       <div className="relative z-10">
         <Navbar />
-
         <div className="h-64 w-full bg-[#0A111F] relative flex items-center justify-center overflow-hidden border-b border-cyan-500/30">
           {game.cover_url ? <img src={game.cover_url} className="absolute inset-0 w-full h-full object-cover opacity-30" /> : <div className="absolute inset-0 opacity-10 bg-[url('/logo.png')] bg-center bg-no-repeat bg-contain"></div>}
           <div className="absolute inset-0 bg-gradient-to-t from-[#050B14] via-transparent to-black/50"></div>
@@ -270,7 +264,6 @@ function GameDetailContent() {
             <h1 className="text-5xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 mb-2 tracking-widest text-center break-all drop-shadow-[0_0_15px_rgba(6,182,212,0.5)] font-orbitron">{game.name}</h1>
             <p className="text-cyan-300 bg-cyan-950/50 border border-cyan-500/50 px-4 py-1.5 rounded-full text-sm backdrop-blur-md">👑 节点创建者: {game.creator?.nickname || '未知'}</p>
           </div>
-
           <button onClick={() => router.push('/')} className="absolute top-6 left-6 bg-black/60 border border-cyan-500/50 text-cyan-400 px-5 py-2 rounded-lg text-sm font-bold hover:bg-cyan-500/20 transition">← 断开连接</button>
         </div>
 
@@ -279,10 +272,7 @@ function GameDetailContent() {
             <button onClick={() => setIsPosting(true)} className="bg-blue-600 text-white px-8 py-3.5 rounded-xl font-black shadow-[0_0_20px_rgba(37,99,235,0.5)] hover:bg-blue-500 hover:scale-105 transition-all flex items-center gap-2 tracking-widest font-orbitron">
               <span className="text-xl">🚨</span> 发布招募通缉令
             </button>
-            <button 
-              onClick={toggleFollowGame} 
-              className={`px-8 py-3.5 rounded-xl font-black shadow-lg transition-all flex items-center gap-2 tracking-widest font-orbitron border ${isFollowingGame ? 'bg-gray-800 text-gray-300 border-gray-600' : 'bg-transparent text-cyan-400 border-cyan-500 hover:bg-cyan-500/10'}`}
-            >
+            <button onClick={toggleFollowGame} className={`px-8 py-3.5 rounded-xl font-black shadow-lg transition-all flex items-center gap-2 tracking-widest font-orbitron border ${isFollowingGame ? 'bg-gray-800 text-gray-300 border-gray-600' : 'bg-transparent text-cyan-400 border-cyan-500 hover:bg-cyan-500/10'}`}>
               {isFollowingGame ? '✅ 已订阅本频道' : '🔔 订阅频道更新'}
             </button>
           </div>
@@ -290,47 +280,39 @@ function GameDetailContent() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
             {recruits.map((recruit, index) => {
               const isFirstBlood = index === recruits.length - 1;
-
               return (
                 <div key={recruit.id} className="relative bg-[#0A111F]/90 backdrop-blur-md rounded-xl border border-cyan-900/50 overflow-hidden flex flex-col group hover:border-cyan-400 hover:shadow-[0_0_20px_rgba(6,182,212,0.2)] transition-all duration-300">
                   <div className="absolute inset-0 opacity-5 pointer-events-none flex items-center justify-center">
                     {recruit.creator?.avatar_url ? <img src={recruit.creator.avatar_url} className="w-56 h-56 object-cover grayscale rounded-full" /> : <span className="text-9xl font-black text-white">!</span>}
                   </div>
-
                   <div className="p-6 relative z-10 flex-1 flex flex-col">
                     <div className="flex justify-between items-start mb-6 border-b border-cyan-500/20 pb-3">
                       <h2 className="text-4xl font-black text-cyan-400 font-orbitron tracking-tighter drop-shadow-[0_0_8px_rgba(6,182,212,0.5)]">WANTED</h2>
                       <div className="flex gap-2 items-center">
                         <span className="text-xs font-bold bg-blue-900/50 border border-blue-500/50 text-blue-300 px-2.5 py-1 rounded">悬赏招募</span>
                         {userProfile && isAdmin(userProfile.id) && (
-                           <button onClick={() => handleDeleteRecruit(recruit.id)} className="text-xs text-red-400 bg-red-900/20 hover:bg-red-900/50 border border-red-500/30 px-2 py-1 rounded transition" title="删除此通缉令">🗑️ 删除</button>
+                           <button onClick={() => handleDeleteRecruit(recruit.id)} className="text-xs text-red-400 bg-red-900/20 hover:bg-red-900/50 border border-red-500/30 px-2 py-1 rounded transition">🗑️ 删除</button>
                         )}
                       </div>
                     </div>
-
                     <div className="space-y-3 font-medium text-gray-300 mb-8 text-[15px]">
                       <p className="flex items-start gap-2"><span className="text-cyan-500 font-bold shrink-0">主玩内容：</span><span className="line-clamp-2 text-white">{recruit.play_content}</span></p>
-                      {/* 🔥 新增：平台和区服的展示 */}
                       <p className="flex items-start gap-2"><span className="text-cyan-500 font-bold shrink-0">游戏平台：</span><span className="text-blue-300">{recruit.platform}</span></p>
                       <p className="flex items-start gap-2"><span className="text-cyan-500 font-bold shrink-0">大区/区服：</span><span className="text-blue-300">{recruit.server_region}</span></p>
                       <p className="flex items-start gap-2"><span className="text-cyan-500 font-bold shrink-0">在线时间：</span><span className="text-cyan-100">{recruit.online_time}</span></p>
                       {recruit.personality && <p className="flex items-start gap-2"><span className="text-cyan-500 font-bold shrink-0">战术要求：</span><span className="line-clamp-3 text-gray-400">{recruit.personality}</span></p>}
                     </div>
-
                     <div className="flex items-center justify-between mt-auto pt-4 border-t border-cyan-500/20">
                       <div className="flex items-center gap-3">
                         <img src={recruit.creator?.avatar_url || '/logo.png'} className="w-11 h-11 rounded border border-fuchsia-500/50 object-cover bg-black" />
                         <div>
                           <div className="flex items-center gap-2">
                             <p className="text-[15px] font-bold text-white">{recruit.creator?.nickname}</p>
-                            {isFirstBlood && (
-                              <span className="text-[9px] bg-red-500/20 text-red-400 border border-red-500/50 px-1.5 py-0.5 rounded shadow-[0_0_8px_rgba(239,68,68,0.5)]">🩸 首杀</span>
-                            )}
+                            {isFirstBlood && <span className="text-[9px] bg-red-500/20 text-red-400 border border-red-500/50 px-1.5 py-0.5 rounded shadow-[0_0_8px_rgba(239,68,68,0.5)]">🩸 首杀</span>}
                           </div>
                           <p className="text-xs text-fuchsia-400 font-mono">ID: {recruit.creator?.id}</p>
                         </div>
                       </div>
-
                       <div className="flex gap-2">
                         <button onClick={() => handleLike(recruit.id, recruit.creator.id)} className={`px-3 py-1.5 rounded text-xs font-bold transition-all border flex items-center gap-1 ${likedIds.includes(recruit.id) ? 'bg-red-900/40 text-red-400 border-red-500/50' : 'bg-transparent text-gray-400 border-gray-600 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/50'}`}>
                           {likedIds.includes(recruit.id) ? '❤️ 已赞' : '🤍 点赞'}
@@ -343,7 +325,6 @@ function GameDetailContent() {
                       </div>
                     </div>
                   </div>
-
                   <div className="flex border-t border-blue-500/30 bg-[#050B14]/80 divide-x divide-blue-500/30">
                     <button onClick={() => openComments(recruit)} className="flex-1 py-3.5 text-cyan-400 text-sm font-bold hover:bg-cyan-500/10 transition">💬 查看留言</button>
                     <button onClick={() => router.push(`/messages?target=${recruit.creator.id}`)} className="flex-1 py-3.5 text-blue-400 text-sm font-bold hover:bg-blue-500/10 transition">✉️ 发送私信</button>
@@ -355,15 +336,12 @@ function GameDetailContent() {
         </main>
       </div>
 
-      {/* 发布招募弹窗 (新增了平台和区服的输入) */}
       {isPosting && (
         <div className="fixed inset-0 bg-[#050B14]/90 backdrop-blur-md flex items-center justify-center z-50 p-4">
           <div className="bg-[#0A111F] border border-cyan-500/50 rounded-2xl p-6 md:p-8 w-full max-w-md shadow-[0_0_30px_rgba(6,182,212,0.2)]">
             <h3 className="text-xl md:text-2xl font-black mb-6 text-white text-center tracking-widest font-orbitron">发布赛博通缉令</h3>
-            
             <label className="block text-xs font-bold text-cyan-500 mb-1">主玩内容 *</label>
             <input className="w-full bg-[#050B14] border border-cyan-900/50 rounded-lg px-4 py-2.5 mb-4 text-white outline-none focus:border-cyan-500" placeholder="如：大乱斗 / 排位上分" value={playContent} onChange={(e) => setPlayContent(e.target.value)} />
-            
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
                 <label className="block text-xs font-bold text-cyan-500 mb-1">游戏平台 *</label>
@@ -374,15 +352,11 @@ function GameDetailContent() {
                 <input className="w-full bg-[#050B14] border border-cyan-900/50 rounded-lg px-4 py-2.5 text-white outline-none focus:border-cyan-500" placeholder="如：电一 / 亚服" value={serverRegion} onChange={(e) => setServerRegion(e.target.value)} />
               </div>
             </div>
-
             <label className="block text-xs font-bold text-cyan-500 mb-1">在线时间 *</label>
             <input className="w-full bg-[#050B14] border border-cyan-900/50 rounded-lg px-4 py-2.5 mb-4 text-white outline-none focus:border-cyan-500" placeholder="如：每晚 20:00 - 23:00" value={onlineTime} onChange={(e) => setOnlineTime(e.target.value)} />
-            
             <label className="block text-xs font-bold text-cyan-500 mb-1">战术要求 (选填)</label>
             <textarea className="w-full bg-[#050B14] border border-cyan-900/50 rounded-lg px-4 py-2.5 mb-4 text-white outline-none focus:border-cyan-500 h-24 resize-none" placeholder="如：脾气好，不压力队友..." value={personality} onChange={(e) => setPersonality(e.target.value)} />
-            
             {postMsg && <p className="text-red-500 text-sm mb-4 text-center">{postMsg}</p>}
-            
             <div className="flex gap-3 mt-6">
               <button onClick={() => setIsPosting(false)} className="flex-1 bg-gray-800 text-gray-300 py-3 rounded-lg font-bold hover:bg-gray-700">取消</button>
               <button onClick={handlePostRecruit} className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-500 shadow-[0_0_15px_rgba(37,99,235,0.4)]">确认发布</button>
@@ -391,7 +365,6 @@ function GameDetailContent() {
         </div>
       )}
 
-      {/* 评论弹窗保持不变 */}
       {activeRecruit && (
         <div className="fixed inset-0 bg-[#050B14]/90 backdrop-blur-md flex items-center justify-center z-50 p-4">
           <div className="bg-[#0A111F] border border-cyan-500/50 rounded-2xl w-full max-w-lg shadow-[0_0_30px_rgba(6,182,212,0.2)] flex flex-col h-[80vh] max-h-[600px] overflow-hidden">
