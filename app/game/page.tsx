@@ -179,7 +179,6 @@ function GameDetailContent() {
           actor_id: userProfile.id,
           type: 'new_recruit',
           content: `在 [${game?.name}] 发布了新招募：${playContent}`,
-          // 🔥 修复了这里的 TypeScript 类型报错
           related_id: parseInt(gameId as string)
         }))
         await supabase.from('notifications').insert(notifications)
@@ -192,6 +191,12 @@ function GameDetailContent() {
   async function handleDeleteRecruit(recruitId: number) {
     if (!confirm('⚠️ 警告：确定要删除这条悬赏通缉令吗？')) return
     await supabase.from('recruits').delete().eq('id', recruitId)
+    fetchRecruits()
+  }
+
+  // 🔥 新增：结案功能
+  async function handleCloseRecruit(recruitId: number, currentStatus: boolean) {
+    await supabase.from('recruits').update({ is_closed: !currentStatus }).eq('id', recruitId)
     fetchRecruits()
   }
 
@@ -280,8 +285,20 @@ function GameDetailContent() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
             {recruits.map((recruit, index) => {
               const isFirstBlood = index === recruits.length - 1;
+              const isClosed = recruit.is_closed; // 🔥 判断是否已结案
+
               return (
-                <div key={recruit.id} className="relative bg-[#0A111F]/90 backdrop-blur-md rounded-xl border border-cyan-900/50 overflow-hidden flex flex-col group hover:border-cyan-400 hover:shadow-[0_0_20px_rgba(6,182,212,0.2)] transition-all duration-300">
+                <div key={recruit.id} className={`relative bg-[#0A111F]/90 backdrop-blur-md rounded-xl border border-cyan-900/50 overflow-hidden flex flex-col group transition-all duration-300 ${isClosed ? 'opacity-60 grayscale-[0.5]' : 'hover:border-cyan-400 hover:shadow-[0_0_20px_rgba(6,182,212,0.2)]'}`}>
+                  
+                  {/* 已结案印章 */}
+                  {isClosed && (
+                    <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none">
+                      <div className="border-4 border-red-500 text-red-500 text-4xl font-black font-orbitron px-6 py-2 rounded-lg transform -rotate-12 opacity-80 bg-black/40 backdrop-blur-sm">
+                        已满 / 结案
+                      </div>
+                    </div>
+                  )}
+
                   <div className="absolute inset-0 opacity-5 pointer-events-none flex items-center justify-center">
                     {recruit.creator?.avatar_url ? <img src={recruit.creator.avatar_url} className="w-56 h-56 object-cover grayscale rounded-full" /> : <span className="text-9xl font-black text-white">!</span>}
                   </div>
@@ -314,20 +331,50 @@ function GameDetailContent() {
                         </div>
                       </div>
                       <div className="flex gap-2">
-                        <button onClick={() => handleLike(recruit.id, recruit.creator.id)} className={`px-3 py-1.5 rounded text-xs font-bold transition-all border flex items-center gap-1 ${likedIds.includes(recruit.id) ? 'bg-red-900/40 text-red-400 border-red-500/50' : 'bg-transparent text-gray-400 border-gray-600 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/50'}`}>
+                        <button disabled={isClosed} onClick={() => handleLike(recruit.id, recruit.creator.id)} className={`px-3 py-1.5 rounded text-xs font-bold transition-all border flex items-center gap-1 ${likedIds.includes(recruit.id) ? 'bg-red-900/40 text-red-400 border-red-500/50' : 'bg-transparent text-gray-400 border-gray-600 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/50'} ${isClosed && 'opacity-50 cursor-not-allowed'}`}>
                           {likedIds.includes(recruit.id) ? '❤️ 已赞' : '🤍 点赞'}
                         </button>
                         {userProfile && userProfile.id !== recruit.creator?.id && (
-                          <button onClick={() => handleFollow(recruit.creator.id)} className={`px-3 py-1.5 rounded text-xs font-bold transition-all border ${followedIds.includes(recruit.creator.id) ? 'bg-cyan-900/40 text-cyan-400 border-cyan-500/50' : 'bg-transparent text-blue-400 border-blue-500/50 hover:bg-blue-500/20'}`}>
+                          <button disabled={isClosed} onClick={() => handleFollow(recruit.creator.id)} className={`px-3 py-1.5 rounded text-xs font-bold transition-all border ${followedIds.includes(recruit.creator.id) ? 'bg-cyan-900/40 text-cyan-400 border-cyan-500/50' : 'bg-transparent text-blue-400 border-blue-500/50 hover:bg-blue-500/20'} ${isClosed && 'opacity-50 cursor-not-allowed'}`}>
                             {followedIds.includes(recruit.creator.id) ? '已关注' : '+ 关注'}
                           </button>
                         )}
                       </div>
                     </div>
                   </div>
+                  
+                  {/* 底部操作区 */}
                   <div className="flex border-t border-blue-500/30 bg-[#050B14]/80 divide-x divide-blue-500/30">
                     <button onClick={() => openComments(recruit)} className="flex-1 py-3.5 text-cyan-400 text-sm font-bold hover:bg-cyan-500/10 transition">💬 查看留言</button>
-                    <button onClick={() => router.push(`/messages?target=${recruit.creator.id}`)} className="flex-1 py-3.5 text-blue-400 text-sm font-bold hover:bg-blue-500/10 transition">✉️ 发送私信</button>
+                    
+                    {/* 结案按钮（仅限发帖人可见） */}
+                    {userProfile && userProfile.id === recruit.creator?.id && (
+                      <button onClick={() => handleCloseRecruit(recruit.id, isClosed)} className={`flex-1 py-3.5 text-sm font-bold transition ${isClosed ? 'text-yellow-400 hover:bg-yellow-500/10' : 'text-gray-400 hover:bg-gray-500/10'}`}>
+                        {isClosed ? '🔓 重新开启' : '✅ 结案'}
+                      </button>
+                    )}
+                    
+                    {/* 举报按钮 */}
+                    <button 
+                      onClick={async () => {
+                        if (!userProfile) return alert('请先登录！')
+                        const reason = prompt('请输入举报理由（如：诈骗、代练广告、辱骂等）：')
+                        if (!reason) return
+                        await supabase.from('feedbacks').insert({ 
+                          user_id: userProfile.id, 
+                          type: '举报', 
+                          content: `举报用户[ID:${recruit.creator.id}]的招募令: ${recruit.play_content}。理由: ${reason}` 
+                        })
+                        alert('举报已提交，巡游天官会尽快处理！')
+                      }} 
+                      className="flex-1 py-3.5 text-red-400 text-sm font-bold hover:bg-red-500/10 transition"
+                    >
+                      🚩 举报
+                    </button>
+
+                    {!isClosed && (
+                      <button onClick={() => router.push(`/messages?target=${recruit.creator.id}`)} className="flex-1 py-3.5 text-blue-400 text-sm font-bold hover:bg-blue-500/10 transition">✉️ 私信</button>
+                    )}
                   </div>
                 </div>
               )
