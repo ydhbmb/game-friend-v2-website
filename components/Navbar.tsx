@@ -13,6 +13,9 @@ export default function Navbar() {
   const [loading, setLoading] = useState(true)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   
+  const [unreadNotif, setUnreadNotif] = useState(0)
+  const [hasUnreadMsg, setHasUnreadMsg] = useState(false)
+
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -27,12 +30,20 @@ export default function Navbar() {
     return () => document.removeEventListener("mousedown", handleClickOutside)
   }, [pathname])
 
+  useEffect(() => {
+    let interval: NodeJS.Timeout
+    if (userProfile) {
+      fetchUnread()
+      interval = setInterval(fetchUnread, 10000) // 每10秒刷新
+    }
+    return () => { if (interval) clearInterval(interval) }
+  }, [userProfile])
+
   async function fetchUser() {
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
       const { data } = await supabase.from('users_profile').select('*').eq('auth_id', user.id).single()
       if (data) {
-        // 🔥 全站封禁拦截
         if (data.banned_until && new Date(data.banned_until) > new Date()) {
           alert('您已经被巡游天官发现您的违禁行为，禁止进入！')
           await supabase.auth.signOut()
@@ -43,6 +54,26 @@ export default function Navbar() {
       }
     }
     setLoading(false)
+  }
+
+  async function fetchUnread() {
+    if (!userProfile) return
+    
+    // 1. 查通知（只要库里有一条，就亮红点）
+    const { count: notifCount } = await supabase
+      .from('notifications')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userProfile.id)
+    
+    setUnreadNotif(notifCount || 0)
+
+    // 2. 查消息（只要有别人发给你的一条，就亮红点）
+    const { count: msgCount } = await supabase
+      .from('messages')
+      .select('*', { count: 'exact', head: true })
+      .eq('receiver_id', userProfile.id)
+    
+    setHasUnreadMsg((msgCount || 0) > 0)
   }
 
   async function handleLogout() {
@@ -86,11 +117,18 @@ export default function Navbar() {
           <span className="text-cyan-500 text-xs animate-pulse">加载中...</span>
         ) : userProfile && levelInfo ? (
           <div className="flex items-center gap-1 md:gap-3 relative">
-            <Link href="/messages" className="text-xs font-bold px-2 py-1.5 rounded-lg text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/20">
+            <Link href="/messages" className="relative text-xs font-bold px-2 py-1.5 rounded-lg text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/20">
               <span className="hidden md:inline">消息</span><span className="md:hidden">✉️</span>
+              {hasUnreadMsg && <span className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-red-500 rounded-full border-2 border-[#050B14] animate-pulse"></span>}
             </Link>
-            <Link href="/notifications" className="text-xs font-bold px-2 py-1.5 rounded-lg text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/20">
+            
+            <Link href="/notifications" className="relative text-xs font-bold px-2 py-1.5 rounded-lg text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/20">
               <span className="hidden md:inline">通知</span><span className="md:hidden">🔔</span>
+              {unreadNotif > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[9px] font-bold px-1.5 rounded-full border-2 border-[#050B14]">
+                  {unreadNotif > 99 ? '99+' : unreadNotif}
+                </span>
+              )}
             </Link>
 
             <div className="relative ml-1 md:ml-2 pl-2 md:pl-4 border-l border-gray-700" ref={menuRef}>
@@ -111,6 +149,7 @@ export default function Navbar() {
                     <p className="text-xs text-white font-bold">{userProfile.nickname}</p>
                     <p className="text-[10px] text-cyan-400">Lv.{levelInfo.level} {levelInfo.name}</p>
                   </div>
+                  <Link href={`/profile?id=${userProfile.id}`} onClick={() => setIsMenuOpen(false)} className="block px-4 py-2 text-sm text-gray-300 hover:bg-cyan-500/20">个人主页</Link>
                   <Link href="/user-center" onClick={() => setIsMenuOpen(false)} className="block px-4 py-2 text-sm text-gray-300 hover:bg-cyan-500/20">用户中心</Link>
                   <button onClick={handleLogout} className="block w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-red-500/20">退出登录</button>
                 </div>

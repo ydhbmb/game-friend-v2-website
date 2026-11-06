@@ -102,7 +102,7 @@ export default function TeamsPage() {
     setCreateMsg('创建中...')
     let iconUrl = ''
     if (newTeamIcon) {
-      if (newTeamIcon.size > 2 * 1024 * 1024) return setCreateMsg('图标不能超过 2MB')
+      if (newTeamIcon.size > 500 * 1024) return setCreateMsg('图标不能超过 500KB')
       const fileName = `team-${Date.now()}.${newTeamIcon.name.split('.').pop()}`
       const { error } = await supabase.storage.from('avatars').upload(fileName, newTeamIcon)
       if (!error) {
@@ -171,19 +171,35 @@ export default function TeamsPage() {
       <div className="min-h-screen bg-[#050B14] flex flex-col h-screen overflow-hidden">
         <Navbar />
         
-        <div className="bg-[#0A111F] border-b border-cyan-500/30 p-6 flex items-center gap-4 shrink-0 shadow-lg z-10">
-          <img src={myTeam.icon_url || '/logo.png'} className="w-16 h-16 rounded-xl border-2 border-cyan-400 bg-black object-cover" />
-          <div>
-            <h1 className="text-3xl font-black text-white font-orbitron">{myTeam.name}</h1>
-            <p className="text-sm text-gray-400 mt-1">{myTeam.description || '这个战队很神秘，什么都没留下。'}</p>
+        {/* 🔥 全新的战队头部资料卡 */}
+        <div className="bg-[#0A111F] border-b border-cyan-500/30 p-6 flex flex-col md:flex-row items-center gap-6 shrink-0 shadow-lg z-10 relative overflow-hidden">
+          <div className="absolute inset-0 bg-[url('/logo.png')] bg-right bg-no-repeat bg-contain opacity-5 pointer-events-none"></div>
+          
+          <img src={myTeam.icon_url || '/logo.png'} className="w-24 h-24 rounded-2xl border-2 border-cyan-400 bg-black object-cover shadow-[0_0_20px_rgba(6,182,212,0.4)] relative z-10" />
+          
+          <div className="flex-1 text-center md:text-left relative z-10">
+            <div className="flex flex-col md:flex-row items-center gap-3 mb-2">
+              <h1 className="text-4xl font-black text-white font-orbitron tracking-wider">{myTeam.name}</h1>
+              <span className="bg-yellow-500/20 text-yellow-400 border border-yellow-500/50 px-3 py-1 rounded-full text-xs font-bold shadow-[0_0_10px_rgba(250,204,21,0.3)]">
+                Lv.1 初建战队
+              </span>
+            </div>
+            <p className="text-sm text-gray-400 font-mono mb-4">{myTeam.description || '这个战队很神秘，什么都没留下。'}</p>
+            
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 text-xs text-cyan-500 font-mono">
+              <span>👑 会长: {members.find(m => m.role === 'leader')?.users_profile?.nickname || '未知'}</span>
+              <span>👥 成员: {members.length} 人</span>
+              <span>⚔️ 战力: {members.reduce((acc, cur) => acc + (cur.users_profile?.id || 0), 0)}</span>
+            </div>
           </div>
-          <div className="ml-auto flex items-center gap-4">
-            <div className="bg-cyan-900/30 border border-cyan-500/30 px-3 py-1 rounded-lg">
-               <span className="text-xs text-cyan-400">你的职位：</span>
-               <span className="font-bold text-white">{myRole === 'leader' ? '👑 会长' : myRole === 'vice_leader' ? '⚔️ 副会长' : myRole === 'admin' ? '🛡️ 管理员' : '👤 成员'}</span>
+
+          <div className="flex items-center gap-3 relative z-10">
+            <div className="bg-cyan-900/30 border border-cyan-500/30 px-4 py-2 rounded-lg text-center">
+               <span className="block text-[10px] text-cyan-400 mb-1">我的职位</span>
+               <span className="font-bold text-white text-sm">{myRole === 'leader' ? '👑 会长' : myRole === 'vice_leader' ? '⚔️ 副会长' : myRole === 'admin' ? '🛡️ 管理员' : '👤 成员'}</span>
             </div>
             {myRole !== 'leader' && (
-              <button onClick={handleQuitTeam} className="text-xs bg-red-900/20 text-red-400 border border-red-500/30 px-3 py-1.5 rounded hover:bg-red-900/40 transition">退出战队</button>
+              <button onClick={handleQuitTeam} className="text-xs bg-red-900/20 text-red-400 border border-red-500/30 px-4 py-2.5 rounded-lg hover:bg-red-900/40 transition">退出</button>
             )}
           </div>
         </div>
@@ -191,7 +207,6 @@ export default function TeamsPage() {
         <div className="flex-1 flex overflow-hidden max-w-[1400px] w-full mx-auto">
           <div className="w-48 bg-[#050B14] border-r border-gray-800 p-4 space-y-2 shrink-0 hidden md:block">
             <button onClick={() => setActiveTab('chat')} className={`w-full text-left px-4 py-3 rounded-xl font-bold transition ${activeTab === 'chat' ? 'bg-cyan-600 text-white' : 'text-gray-400 hover:bg-gray-800'}`}>💬 战队群聊</button>
-            {/* 🔥 把标签改得更显眼 */}
             <button onClick={() => setActiveTab('members')} className={`w-full text-left px-4 py-3 rounded-xl font-bold transition ${activeTab === 'members' ? 'bg-cyan-600 text-white' : 'text-gray-400 hover:bg-gray-800'}`}>
               👥 成员与审批 {pendingMembers.length > 0 && <span className="ml-1 bg-red-500 text-white text-[10px] px-1.5 rounded-full">{pendingMembers.length}</span>}
             </button>
@@ -323,7 +338,7 @@ export default function TeamsPage() {
               <input className="w-full bg-[#050B14] border border-gray-700 rounded-xl px-4 py-2 text-white" placeholder="战队名称（唯一）" value={newTeamName} onChange={(e) => setNewTeamName(e.target.value)} />
               <textarea className="w-full bg-[#050B14] border border-gray-700 rounded-xl px-4 py-2 text-white h-24 resize-none" placeholder="战队简介..." value={newTeamDesc} onChange={(e) => setNewTeamDesc(e.target.value)} />
               <div>
-                <label className="text-xs text-cyan-500 mb-1 block">上传战队图标 (小于2MB)</label>
+                <label className="text-xs text-cyan-500 mb-1 block">上传战队图标 (小于500KB)</label>
                 <input type="file" accept="image/*" className="text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-cyan-900/50 file:text-cyan-400 hover:file:bg-cyan-800/50" onChange={(e) => { if(e.target.files) setNewTeamIcon(e.target.files[0]) }} />
               </div>
             </div>

@@ -92,8 +92,15 @@ export default function HomePage() {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setCoverFile(e.target.files[0])
-      setCoverPreview(URL.createObjectURL(e.target.files[0]))
+      const file = e.target.files[0]
+      // 🔥 封面大小限制 500KB
+      if (file.size > 500 * 1024) {
+        alert('封面图片不能超过 500KB，请压缩后再上传！')
+        e.target.value = ''
+        return
+      }
+      setCoverFile(file)
+      setCoverPreview(URL.createObjectURL(file))
     }
   }
 
@@ -137,6 +144,7 @@ export default function HomePage() {
     e.preventDefault()
     if (!e.target.files || !e.target.files[0]) return
     const file = e.target.files[0]
+    if (file.size > 500 * 1024) return alert('封面图片不能超过 500KB')
     const fileExt = file.name.split('.').pop()
     const fileName = `game-${gameId}-${Date.now()}.${fileExt}`
     const { error: uploadError } = await supabase.storage.from('game_covers').upload(fileName, file)
@@ -242,7 +250,6 @@ export default function HomePage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5 md:gap-8">
                   {games.map(game => (
                     <div key={game.id} className="relative group bg-[#0A111F] rounded-2xl border border-gray-800 overflow-hidden hover:border-cyan-400 transition-all duration-500 transform hover:-translate-y-2 hover:shadow-[0_10px_40px_rgba(6,182,212,0.3)]">
-                      {/* 🔥 核心改动：链接改为 ?id= */}
                       <Link href={`/game?id=${game.id}`} className="block relative z-10">
                         <div className="h-40 md:h-48 w-full bg-black relative overflow-hidden flex items-center justify-center">
                           {game.cover_url ? (
@@ -303,18 +310,24 @@ export default function HomePage() {
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-[#0A111F]/95 border border-cyan-500/50 rounded-2xl p-8 w-full max-w-md shadow-[0_0_50px_rgba(6,182,212,0.3)] relative overflow-hidden">
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-400 via-blue-500 to-cyan-400"></div>
+            
             <h3 className="text-2xl font-black mb-6 text-white text-center font-orbitron tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">创建游戏模块</h3>
+            
             <div className="space-y-4">
               <input className="w-full bg-[#050B14] border border-cyan-900/50 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-400" placeholder="输入游戏名称" value={newGameName} onChange={(e) => setNewGameName(e.target.value)} />
               <div onClick={() => fileInputRef.current?.click()} className="w-full h-32 border-2 border-dashed border-cyan-900/50 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-cyan-400 hover:bg-cyan-500/5 transition-all overflow-hidden">
-                {coverPreview ? <img src={coverPreview} className="w-full h-full object-cover" /> : <><span className="text-2xl mb-2">🖼️</span><span className="text-gray-400 text-sm">点击上传封面</span></>}
+                {coverPreview ? <img src={coverPreview} className="w-full h-full object-cover" /> : <><span className="text-2xl mb-2">🖼️</span><span className="text-gray-400 text-sm">点击上传封面 (小于500KB)</span></>}
               </div>
               <input type="file" className="hidden" ref={fileInputRef} onChange={handleFileChange} />
             </div>
+            
             {createMsg && <p className="text-red-400 text-sm text-center mt-4">{createMsg}</p>}
+            
             <div className="flex gap-4 mt-8">
               <button onClick={() => setIsModalOpen(false)} className="flex-1 bg-gray-800 text-gray-300 py-3 rounded-xl font-bold hover:bg-gray-700 transition">取消</button>
-              <button onClick={handleCreateGame} disabled={uploading} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-black hover:bg-blue-500 shadow-[0_0_20px_rgba(37,99,235,0.5)] transition-all">{uploading ? '部署中...' : '确认创建'}</button>
+              <button onClick={handleCreateGame} disabled={uploading} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-black hover:bg-blue-500 shadow-[0_0_20px_rgba(37,99,235,0.5)] transition-all">
+                {uploading ? '部署中...' : '确认创建'}
+              </button>
             </div>
           </div>
         </div>
