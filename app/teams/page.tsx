@@ -10,21 +10,19 @@ export default function TeamsPage() {
   const [userProfile, setUserProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   
-  // 战队相关状态
   const [myTeam, setMyTeam] = useState<any>(null)
   const [myRole, setMyRole] = useState<string>('')
   const [allTeams, setAllTeams] = useState<any[]>([])
   const [search, setSearch] = useState('')
   
-  // 页面 A 状态
   const [isCreating, setIsCreating] = useState(false)
   const [newTeamName, setNewTeamName] = useState('')
   const [newTeamDesc, setNewTeamDesc] = useState('')
   const [newTeamIcon, setNewTeamIcon] = useState<File | null>(null)
   const [createMsg, setCreateMsg] = useState('')
 
-  // 页面 B 状态（成员与聊天）
   const [members, setMembers] = useState<any[]>([])
+  const [pendingMembers, setPendingMembers] = useState<any[]>([])
   const [messages, setMessages] = useState<any[]>([])
   const [newMsg, setNewMsg] = useState('')
   const [activeTab, setActiveTab] = useState<'chat' | 'members'>('chat')
@@ -41,15 +39,16 @@ export default function TeamsPage() {
       setUserProfile(profile)
 
       if (profile) {
-        // 1. 检查是否已经加入战队
         const { data: memberData } = await supabase.from('team_members').select('team_id, role, teams(*)').eq('user_id', profile.id).neq('role', 'pending').single()
         
         if (memberData && memberData.teams) {
           setMyTeam(memberData.teams)
           setMyRole(memberData.role)
           fetchMembers(memberData.team_id)
+          if (['leader', 'vice_leader', 'admin'].includes(memberData.role)) {
+            fetchPending(memberData.team_id)
+          }
         } else {
-          // 未加入，获取所有战队列表
           fetchTeams()
         }
       }
@@ -58,7 +57,6 @@ export default function TeamsPage() {
     init()
   }, [router])
 
-  // 实时轮询战队群聊
   useEffect(() => {
     let interval: NodeJS.Timeout
     if (myTeam && activeTab === 'chat') {
@@ -78,10 +76,14 @@ export default function TeamsPage() {
   async function fetchMembers(teamId: number) {
     const { data } = await supabase.from('team_members').select(`role, users_profile(id, nickname, avatar_url)`).eq('team_id', teamId).neq('role', 'pending')
     if (data) {
-      // 排序：会长 > 副会长 > 管理员 > 成员
       const roleWeight: any = { leader: 4, vice_leader: 3, admin: 2, member: 1 }
       setMembers(data.sort((a, b) => roleWeight[b.role] - roleWeight[a.role]))
     }
+  }
+
+  async function fetchPending(teamId: number) {
+    const { data } = await supabase.from('team_members').select(`id, users_profile(id, nickname, avatar_url)`).eq('team_id', teamId).eq('role', 'pending')
+    if (data) setPendingMembers(data)
   }
 
   async function fetchMessages(teamId: number, isSilent = false) {
@@ -95,12 +97,12 @@ export default function TeamsPage() {
     }
   }
 
-  // ---- 页面 A 逻辑（创建、搜索、申请）----
   async function handleCreateTeam() {
     if (!newTeamName || !userProfile) return setCreateMsg('请填写名称')
     setCreateMsg('创建中...')
     let iconUrl = ''
     if (newTeamIcon) {
+      if (newTeamIcon.size > 2 * 1024 * 1024) return setCreateMsg('图标不能超过 2MB')
       const fileName = `team-${Date.now()}.${newTeamIcon.name.split('.').pop()}`
       const { error } = await supabase.storage.from('avatars').upload(fileName, newTeamIcon)
       if (!error) {
@@ -109,9 +111,8 @@ export default function TeamsPage() {
       }
     }
     const { data: newTeam, error: teamErr } = await supabase.from('teams').insert({ name: newTeamName, description: newTeamDesc, icon_url: iconUrl, leader_id: userProfile.id }).select().single()
-    if (teamErr) return setCreateMsg('创建失败，可能名字已存在')
+    if (teamErr) return setCreateMsg('创建失败，名字可能已存在')
 
-    // 自己是会长，自动通过审核
     await supabase.from('team_members').insert({ team_id: newTeam.id, user_id: userProfile.id, role: 'leader' })
     setMyTeam(newTeam); setMyRole('leader'); setIsCreating(false)
   }
@@ -120,10 +121,25 @@ export default function TeamsPage() {
     if (!userProfile) return
     const { error } = await supabase.from('team_members').insert({ team_id: teamId, user_id: userProfile.id, role: 'pending' })
     if (error) alert('申请失败，可能你已经申请过了')
-    else alert('申请已发送，请等待管理员审批！')
+    else alert('申请已发送，请等待审批！')
   }
 
-  // ---- 页面 B 逻辑（权限、聊天）----
+  async function handleApprove(memberId: number, approve: boolean) {
+    if (approve) {
+      await supabase.from('team_members').update({ role: 'member' }).eq('id', memberId)
+    } else {
+      await supabase.from('team_members').delete().eq('id', memberId)
+    }
+    fetchPending(myTeam.id)
+    fetchMembers(myTeam.id)
+  }
+
+  async function handleQuitTeam() {
+    if (!confirm('确定要退出当前战队吗？')) return
+    await supabase.from('team_members').delete().eq('team_id', myTeam.id).eq('user_id', userProfile.id)
+    window.location.reload()
+  }
+
   async function handleSendMsg() {
     if (!newMsg.trim() || !myTeam || !userProfile) return
     const content = newMsg
@@ -150,38 +166,42 @@ export default function TeamsPage() {
 
   if (loading) return <div className="min-h-screen bg-[#050B14] flex items-center justify-center text-cyan-500">加载中...</div>
 
-  // ================= 渲染：页面 B（已加入）=================
   if (myTeam) {
     return (
       <div className="min-h-screen bg-[#050B14] flex flex-col h-screen overflow-hidden">
         <Navbar />
         
-        {/* 战队头部 */}
         <div className="bg-[#0A111F] border-b border-cyan-500/30 p-6 flex items-center gap-4 shrink-0 shadow-lg z-10">
           <img src={myTeam.icon_url || '/logo.png'} className="w-16 h-16 rounded-xl border-2 border-cyan-400 bg-black object-cover" />
           <div>
             <h1 className="text-3xl font-black text-white font-orbitron">{myTeam.name}</h1>
             <p className="text-sm text-gray-400 mt-1">{myTeam.description || '这个战队很神秘，什么都没留下。'}</p>
           </div>
-          <div className="ml-auto flex items-center gap-2 bg-cyan-900/30 border border-cyan-500/30 px-3 py-1 rounded-lg">
-             <span className="text-xs text-cyan-400">你的职位：</span>
-             <span className="font-bold text-white">{myRole === 'leader' ? '👑 会长' : myRole === 'vice_leader' ? '⚔️ 副会长' : myRole === 'admin' ? '🛡️ 管理员' : '👤 成员'}</span>
+          <div className="ml-auto flex items-center gap-4">
+            <div className="bg-cyan-900/30 border border-cyan-500/30 px-3 py-1 rounded-lg">
+               <span className="text-xs text-cyan-400">你的职位：</span>
+               <span className="font-bold text-white">{myRole === 'leader' ? '👑 会长' : myRole === 'vice_leader' ? '⚔️ 副会长' : myRole === 'admin' ? '🛡️ 管理员' : '👤 成员'}</span>
+            </div>
+            {myRole !== 'leader' && (
+              <button onClick={handleQuitTeam} className="text-xs bg-red-900/20 text-red-400 border border-red-500/30 px-3 py-1.5 rounded hover:bg-red-900/40 transition">退出战队</button>
+            )}
           </div>
         </div>
 
         <div className="flex-1 flex overflow-hidden max-w-[1400px] w-full mx-auto">
-          {/* 左侧：功能切换 */}
           <div className="w-48 bg-[#050B14] border-r border-gray-800 p-4 space-y-2 shrink-0 hidden md:block">
             <button onClick={() => setActiveTab('chat')} className={`w-full text-left px-4 py-3 rounded-xl font-bold transition ${activeTab === 'chat' ? 'bg-cyan-600 text-white' : 'text-gray-400 hover:bg-gray-800'}`}>💬 战队群聊</button>
-            <button onClick={() => setActiveTab('members')} className={`w-full text-left px-4 py-3 rounded-xl font-bold transition ${activeTab === 'members' ? 'bg-cyan-600 text-white' : 'text-gray-400 hover:bg-gray-800'}`}>👥 成员列表</button>
+            {/* 🔥 把标签改得更显眼 */}
+            <button onClick={() => setActiveTab('members')} className={`w-full text-left px-4 py-3 rounded-xl font-bold transition ${activeTab === 'members' ? 'bg-cyan-600 text-white' : 'text-gray-400 hover:bg-gray-800'}`}>
+              👥 成员与审批 {pendingMembers.length > 0 && <span className="ml-1 bg-red-500 text-white text-[10px] px-1.5 rounded-full">{pendingMembers.length}</span>}
+            </button>
           </div>
 
-          {/* 右侧：内容区 */}
           <div className="flex-1 flex flex-col bg-[#0A111F] relative">
             {activeTab === 'chat' && (
               <>
                 <div className="p-4 border-b border-gray-800 bg-black/40 md:hidden">
-                   <button onClick={() => setActiveTab('members')} className="text-cyan-400 text-sm">切换至成员列表</button>
+                   <button onClick={() => setActiveTab('members')} className="text-cyan-400 text-sm">切换至成员与审批</button>
                 </div>
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
                   {messages.map(m => {
@@ -207,7 +227,30 @@ export default function TeamsPage() {
 
             {activeTab === 'members' && (
               <div className="flex-1 overflow-y-auto p-6">
-                <h2 className="text-xl font-bold text-cyan-400 mb-4 font-orbitron">战队成员 ({members.length})</h2>
+                {(['leader', 'vice_leader', 'admin'].includes(myRole)) && pendingMembers.length > 0 && (
+                  <div className="mb-8">
+                    <h2 className="text-lg font-bold text-yellow-400 mb-3 flex items-center gap-2">⏳ 待审批申请 ({pendingMembers.length})</h2>
+                    <div className="space-y-3">
+                      {pendingMembers.map((p: any) => (
+                        <div key={p.id} className="bg-yellow-900/10 border border-yellow-500/30 p-4 rounded-xl flex items-center justify-between">
+                           <div className="flex items-center gap-3">
+                             <img src={p.users_profile?.avatar_url || '/logo.png'} className="w-10 h-10 rounded-full border border-gray-700 bg-black" />
+                             <div>
+                               <p className="text-sm font-bold text-white">{p.users_profile?.nickname}</p>
+                               <p className="text-[10px] text-gray-500">ID: {p.users_profile?.id}</p>
+                             </div>
+                           </div>
+                           <div className="flex gap-2">
+                             <button onClick={() => handleApprove(p.id, true)} className="text-xs bg-green-600 text-white px-4 py-1.5 rounded hover:bg-green-500 transition">同意</button>
+                             <button onClick={() => handleApprove(p.id, false)} className="text-xs bg-gray-800 text-red-400 border border-gray-700 px-4 py-1.5 rounded hover:bg-gray-700 transition">拒绝</button>
+                           </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <h2 className="text-xl font-bold text-cyan-400 mb-4 font-orbitron">正式成员 ({members.length})</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {members.map((m: any) => (
                     <div key={m.users_profile.id} className="bg-[#050B14] border border-gray-800 p-4 rounded-xl flex items-center justify-between hover:border-cyan-500/50 transition">
@@ -237,7 +280,6 @@ export default function TeamsPage() {
     )
   }
 
-  // ================= 渲染：页面 A（未加入）=================
   return (
     <div className="min-h-screen bg-[#050B14] text-gray-200">
       <Navbar />
@@ -273,7 +315,6 @@ export default function TeamsPage() {
         </div>
       </main>
 
-      {/* 创建战队弹窗 */}
       {isCreating && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-[#0A111F] border border-cyan-500/50 rounded-2xl p-6 w-full max-w-md shadow-[0_0_30px_rgba(6,182,212,0.2)]">
@@ -281,9 +322,8 @@ export default function TeamsPage() {
             <div className="space-y-4">
               <input className="w-full bg-[#050B14] border border-gray-700 rounded-xl px-4 py-2 text-white" placeholder="战队名称（唯一）" value={newTeamName} onChange={(e) => setNewTeamName(e.target.value)} />
               <textarea className="w-full bg-[#050B14] border border-gray-700 rounded-xl px-4 py-2 text-white h-24 resize-none" placeholder="战队简介..." value={newTeamDesc} onChange={(e) => setNewTeamDesc(e.target.value)} />
-              
               <div>
-                <label className="text-xs text-cyan-500 mb-1 block">上传战队图标</label>
+                <label className="text-xs text-cyan-500 mb-1 block">上传战队图标 (小于2MB)</label>
                 <input type="file" accept="image/*" className="text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-cyan-900/50 file:text-cyan-400 hover:file:bg-cyan-800/50" onChange={(e) => { if(e.target.files) setNewTeamIcon(e.target.files[0]) }} />
               </div>
             </div>
