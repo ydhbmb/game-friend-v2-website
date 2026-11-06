@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import FeedbackButton from "@/components/FeedbackButton";
+import ChatWidget from "@/components/ChatWidget";
 
 export const metadata: Metadata = {
   title: "Wingman Games - 找到你的最佳游戏搭子",
@@ -16,7 +17,9 @@ export default function RootLayout({
     <html lang="zh-CN">
       <body className="antialiased">
         {children}
+        {/* 全局挂载反馈与悬浮聊天框 */}
         <FeedbackButton />
+        <ChatWidget />
       </body>
     </html>
   );

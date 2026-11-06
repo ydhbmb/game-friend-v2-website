@@ -34,10 +34,10 @@ export default function Navbar() {
     let interval: NodeJS.Timeout
     if (userProfile) {
       fetchUnread()
-      interval = setInterval(fetchUnread, 5000) // 每5秒刷新一次
+      interval = setInterval(fetchUnread, 5000)
     }
     return () => { if (interval) clearInterval(interval) }
-  }, [userProfile, pathname]) // 切换页面时立刻刷新
+  }, [userProfile, pathname])
 
   async function fetchUser() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -58,23 +58,10 @@ export default function Navbar() {
 
   async function fetchUnread() {
     if (!userProfile) return
-    
-    // 只查未读通知数量
-    const { count: notifCount } = await supabase
-      .from('notifications')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userProfile.id)
-      .eq('is_read', false)
-    
+    const { count: notifCount } = await supabase.from('notifications').select('*', { count: 'exact', head: true }).eq('user_id', userProfile.id).eq('is_read', false)
     setUnreadNotif(notifCount || 0)
 
-    // 只查未读消息数量
-    const { count: msgCount } = await supabase
-      .from('messages')
-      .select('*', { count: 'exact', head: true })
-      .eq('receiver_id', userProfile.id)
-      .eq('is_read', false)
-    
+    const { count: msgCount } = await supabase.from('messages').select('*', { count: 'exact', head: true }).eq('receiver_id', userProfile.id).eq('is_read', false)
     setHasUnreadMsg((msgCount || 0) > 0)
   }
 
@@ -87,7 +74,6 @@ export default function Navbar() {
     if (!userProfile) return
     const today = new Date().toISOString().split('T')[0]
     if (userProfile.last_checkin_at === today) return alert('今天已经签到过啦！')
-
     const { error } = await supabase.from('users_profile').update({ experience: (userProfile.experience || 0) + 5, last_checkin_at: today }).eq('id', userProfile.id)
     if (!error) {
       alert('签到成功！获得 5 经验！')
@@ -119,10 +105,15 @@ export default function Navbar() {
           <span className="text-cyan-500 text-xs animate-pulse">加载中...</span>
         ) : userProfile && levelInfo ? (
           <div className="flex items-center gap-1 md:gap-3 relative">
-            <Link href="/messages" className="relative text-xs font-bold px-2 py-1.5 rounded-lg text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/20">
+            
+            {/* 🔥 把原来的 Link 改成 button，点击触发自定义事件 */}
+            <button 
+              onClick={() => window.dispatchEvent(new Event('openChatWidget'))}
+              className="relative text-xs font-bold px-2 py-1.5 rounded-lg text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/20"
+            >
               <span className="hidden md:inline">消息</span><span className="md:hidden">✉️</span>
               {hasUnreadMsg && <span className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-red-500 rounded-full border-2 border-[#050B14] animate-pulse"></span>}
-            </Link>
+            </button>
             
             <Link href="/notifications" className="relative text-xs font-bold px-2 py-1.5 rounded-lg text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/20">
               <span className="hidden md:inline">通知</span><span className="md:hidden">🔔</span>
