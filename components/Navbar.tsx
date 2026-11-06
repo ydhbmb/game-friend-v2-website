@@ -34,10 +34,10 @@ export default function Navbar() {
     let interval: NodeJS.Timeout
     if (userProfile) {
       fetchUnread()
-      interval = setInterval(fetchUnread, 10000) // 每10秒刷新
+      interval = setInterval(fetchUnread, 5000) // 每5秒刷新一次
     }
     return () => { if (interval) clearInterval(interval) }
-  }, [userProfile])
+  }, [userProfile, pathname]) // 切换页面时立刻刷新
 
   async function fetchUser() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -59,19 +59,21 @@ export default function Navbar() {
   async function fetchUnread() {
     if (!userProfile) return
     
-    // 1. 查通知（只要库里有一条，就亮红点）
+    // 只查未读通知数量
     const { count: notifCount } = await supabase
       .from('notifications')
       .select('*', { count: 'exact', head: true })
       .eq('user_id', userProfile.id)
+      .eq('is_read', false)
     
     setUnreadNotif(notifCount || 0)
 
-    // 2. 查消息（只要有别人发给你的一条，就亮红点）
+    // 只查未读消息数量
     const { count: msgCount } = await supabase
       .from('messages')
       .select('*', { count: 'exact', head: true })
       .eq('receiver_id', userProfile.id)
+      .eq('is_read', false)
     
     setHasUnreadMsg((msgCount || 0) > 0)
   }

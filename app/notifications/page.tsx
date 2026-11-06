@@ -24,7 +24,15 @@ export default function NotificationsPage() {
           .eq('user_id', profile.id)
           .order('created_at', { ascending: false })
 
-        if (data) setNotifications(data)
+        if (data) {
+          setNotifications(data)
+          
+          // 🔥 核心：将我的所有未读通知标记为已读
+          const unreadIds = data.filter(n => !n.is_read).map(n => n.id)
+          if (unreadIds.length > 0) {
+            await supabase.from('notifications').update({ is_read: true }).in('id', unreadIds)
+          }
+        }
       } catch (err) {
         console.error(err)
       } finally {
@@ -51,7 +59,7 @@ export default function NotificationsPage() {
         ) : (
           <div className="space-y-4">
             {notifications.map(n => (
-              <div key={n.id} className="bg-[#0A111F]/80 backdrop-blur-sm p-4 rounded-xl border border-cyan-900/50 flex items-start justify-between hover:border-cyan-500/50 transition">
+              <div key={n.id} className={`bg-[#0A111F]/80 backdrop-blur-sm p-4 rounded-xl border flex items-start justify-between transition ${n.is_read ? 'border-gray-800 opacity-70' : 'border-cyan-500/50 shadow-[0_0_15px_rgba(6,182,212,0.2)]'}`}>
                 <div className="flex items-start gap-4">
                   <img src={n.actor?.avatar_url || '/logo.png'} className="w-12 h-12 rounded-full object-cover bg-gray-800 border border-gray-700 mt-1" />
                   <div>
@@ -73,7 +81,6 @@ export default function NotificationsPage() {
                   </div>
                 </div>
                 
-                {/* 🔥 核心改动：跳转链接改为 ?id= */}
                 {n.type === 'new_recruit' && n.related_id && (
                   <Link href={`/game?id=${n.related_id}`} className="text-xs bg-cyan-600/20 text-cyan-400 border border-cyan-500/50 px-3 py-1.5 rounded-lg hover:bg-cyan-600 hover:text-white transition whitespace-nowrap">
                     去围观 →

@@ -23,7 +23,6 @@ function MessagesContent() {
   const bottomRef = useRef<HTMLDivElement>(null)
   const prevMsgLength = useRef(0)
 
-  // 1. 初始化加载
   useEffect(() => {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -63,16 +62,12 @@ function MessagesContent() {
     init()
   }, [router, targetId])
 
-  // 2. 核心轮询逻辑：依赖项改为 activeContact?.id，防止对象引用变化导致定时器重启
   useEffect(() => {
     let interval: NodeJS.Timeout
     const currentId = activeContact?.id
 
     if (currentId) {
-      // 切换联系人时，先立刻拉取一次
       fetchMessages(currentId, false)
-      
-      // 然后每 3 秒静默拉取一次
       interval = setInterval(() => {
         fetchMessages(currentId, true)
       }, 3000)
@@ -81,7 +76,7 @@ function MessagesContent() {
     return () => {
       if (interval) clearInterval(interval)
     }
-  }, [activeContact?.id]) // 注意这里只监听 ID
+  }, [activeContact?.id])
 
   async function fetchMessages(contactId: number, isSilent = false) {
     if (!userProfile) return
@@ -93,15 +88,19 @@ function MessagesContent() {
       .order('created_at', { ascending: true })
     
     if (!error && data) {
-      // 只有真正有数据变化时才更新 UI，避免无意义的重复渲染
       if (data.length !== prevMsgLength.current || !isSilent) {
         setMessages(data)
         
-        // 如果是静默刷新，并且出现了新消息，就滚动到底部
         if (isSilent && data.length > prevMsgLength.current) {
           setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
         }
         prevMsgLength.current = data.length
+
+        // 🔥 核心：将对方发给我的未读消息标记为已读
+        const unreadFromContact = data.filter(m => m.sender_id === contactId && m.receiver_id === userProfile.id && !m.is_read)
+        if (unreadFromContact.length > 0) {
+          await supabase.from('messages').update({ is_read: true }).in('id', unreadFromContact.map(m => m.id))
+        }
       }
     }
   }
@@ -117,26 +116,24 @@ function MessagesContent() {
     const content = newMsg
     setNewMsg('')
     
-    // 乐观更新：本地立刻显示
     const tempMsg = {
       id: Date.now(),
       sender_id: userProfile.id,
       receiver_id: activeContact.id,
       content: content,
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
+      is_read: false
     }
     setMessages(prev => [...prev, tempMsg])
     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
     prevMsgLength.current += 1
 
-    // 发送到云端
     const { error } = await supabase.from('messages').insert({
       sender_id: userProfile.id,
       receiver_id: activeContact.id,
       content: content
     })
     
-    // 发送成功后，立刻再拉取一次，确保多端同步
     if (!error) {
       fetchMessages(activeContact.id, true)
     } else {
@@ -167,8 +164,6 @@ function MessagesContent() {
         <Navbar />
 
         <div className="flex-1 flex max-w-6xl w-full mx-auto shadow-[0_0_30px_rgba(0,0,0,0.8)] my-0 md:my-4 md:rounded-2xl overflow-hidden border border-gray-800 bg-[#0A111F]">
-          
-          {/* 左侧联系人列表 */}
           <div className={`w-full md:w-1/3 border-r border-gray-800 bg-[#050B14]/50 flex flex-col ${activeContact ? 'hidden md:flex' : 'flex'}`}>
             <div className="p-4 border-b border-gray-800 bg-black/40">
               <h2 className="font-bold text-cyan-400 tracking-wider font-orbitron">通讯录</h2>
@@ -196,7 +191,6 @@ function MessagesContent() {
             </div>
           </div>
 
-          {/* 右侧聊天窗口 */}
           <div className={`flex-1 flex flex-col bg-[#0A111F] ${!activeContact ? 'hidden md:flex' : 'flex'}`}>
             {activeContact ? (
               <>
