@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Navbar from '@/components/Navbar'
@@ -14,17 +14,24 @@ function GameDetailContent() {
   const [subGames, setSubGames] = useState<any[]>([]) // 子模块列表
   const [userProfile, setUserProfile] = useState<any>(null)
   const [recruits, setRecruits] = useState<any[]>([])
-  const [posts, setPosts] = useState<any[]>([]) // 论坛帖子列表
+  const [posts, setPosts] = useState<any[]>([]) 
   
   const [followedIds, setFollowedIds] = useState<number[]>([])
   const [isFollowingGame, setIsFollowingGame] = useState(false)
   const [likedIds, setLikedIds] = useState<number[]>([])
   const [loading, setLoading] = useState(true)
   
-  // 页面 Tab 切换：招募大厅 or 讨论区
   const [activeTab, setActiveTab] = useState<'recruit' | 'forum'>('recruit')
 
-  // 招募令发布状态
+  // 创建子模块状态
+  const [isCreatingSub, setIsCreatingSub] = useState(false)
+  const [newSubName, setNewSubName] = useState('')
+  const [subCoverFile, setSubCoverFile] = useState<File | null>(null)
+  const [subCoverPreview, setSubCoverPreview] = useState('')
+  const [subCreateMsg, setSubCreateMsg] = useState('')
+  const subFileInputRef = useRef<HTMLInputElement>(null)
+
+  // 招募令状态
   const [isPosting, setIsPosting] = useState(false)
   const [playContent, setPlayContent] = useState('')
   const [onlineTime, setOnlineTime] = useState('')
@@ -33,22 +40,21 @@ function GameDetailContent() {
   const [serverRegion, setServerRegion] = useState('')
   const [postMsg, setPostMsg] = useState('')
 
-  // 论坛发帖状态
+  // 论坛状态
   const [isPostingForum, setIsPostingForum] = useState(false)
   const [forumTitle, setForumTitle] = useState('')
   const [forumContent, setForumContent] = useState('')
   const [forumMsg, setForumMsg] = useState('')
 
-  // 帖子详情与评论状态
   const [activePost, setActivePost] = useState<any>(null)
   const [postComments, setPostComments] = useState<any[]>([])
   const [newPostComment, setNewPostComment] = useState('')
-  const [commentLoading, setCommentLoading] = useState(false)
+  const [postCommentLoading, setPostCommentLoading] = useState(false)
 
-  // 招募令评论弹窗状态（保留原有功能）
   const [activeRecruit, setActiveRecruit] = useState<any>(null)
   const [comments, setComments] = useState<any[]>([])
   const [newComment, setNewComment] = useState('')
+  const [commentLoading, setCommentLoading] = useState(false)
 
   const isAdmin = (uid: number) => {
     const admins = [1, 10000, 11111, 22222, 33333, 44444, 55555, 66666, 77777, 88888, 99999]
@@ -73,19 +79,14 @@ function GameDetailContent() {
           }
         }
 
-        // 1. 获取游戏信息
         const { data: gameData } = await supabase.from('games').select(`*, creator:users_profile(nickname)`).eq('id', gameId).single()
         setGame(gameData)
 
-        // 2. 如果当前是主游戏，获取它的子模块列表
         if (gameData && !gameData.parent_id) {
           const { data: subs } = await supabase.from('games').select(`*`).eq('parent_id', gameId).order('created_at', { ascending: false })
           if (subs) setSubGames(subs)
-        } else {
-          setSubGames([])
         }
 
-        // 3. 获取招募列表和论坛帖子
         await fetchRecruits()
         await fetchPosts()
         
@@ -118,7 +119,58 @@ function GameDetailContent() {
     if (data) setPosts(data)
   }
 
-  // ============ 招募大厅逻辑 ============
+  const handleSubFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0]
+      if (file.size > 500 * 1024) {
+        alert('封面图片不能超过 500KB，请压缩后再上传！')
+        e.target.value = ''
+        return
+      }
+      setSubCoverFile(file)
+      setSubCoverPreview(URL.createObjectURL(file))
+    }
+  }
+
+  async function handleCreateSubGame() {
+    if (!newSubName.trim()) return setSubCreateMsg('请输入子模块名称')
+    if (!userProfile) return setSubCreateMsg('请先登录！')
+    
+    setSubCreateMsg('创建中...')
+    let coverUrl = ''
+    
+    try {
+      if (subCoverFile) {
+        const fileName = `subgame-${Date.now()}.${subCoverFile.name.split('.').pop()}`
+        const { error: uploadError } = await supabase.storage.from('game_covers').upload(fileName, subCoverFile)
+        if (!uploadError) {
+          const { data } = supabase.storage.from('game_covers').getPublicUrl(fileName)
+          coverUrl = data.publicUrl
+        }
+      }
+
+      const { error } = await supabase.from('games').insert({ 
+        name: newSubName, 
+        creator_id: userProfile.id, 
+        cover_url: coverUrl, 
+        parent_id: parseInt(gameId as string)
+      })
+      
+      if (error) throw error
+      
+      const { data: subs } = await supabase.from('games').select(`*`).eq('parent_id', gameId).order('created_at', { ascending: false })
+      if (subs) setSubGames(subs)
+      
+      setIsCreatingSub(false)
+      setNewSubName('')
+      setSubCoverFile(null)
+      setSubCoverPreview('')
+      setSubCreateMsg('')
+    } catch (err: any) {
+      setSubCreateMsg('创建失败：' + err.message)
+    }
+  }
+
   async function toggleFollowGame() {
     if (!userProfile) return alert('请先登录！')
     try {
@@ -129,15 +181,12 @@ function GameDetailContent() {
         await supabase.from('game_follows').insert({ user_id: userProfile.id, game_id: gameId })
         setIsFollowingGame(true)
       }
-    } catch (err: any) {
-      alert('操作失败：' + err.message)
-    }
+    } catch (err: any) {}
   }
 
   async function handleFollow(targetId: number) {
     if (!userProfile) return alert('请先登录！')
     if (targetId === userProfile.id) return
-
     const isFollowed = followedIds.includes(targetId)
     if (isFollowed) {
       await supabase.from('follows').delete().eq('follower_id', userProfile.id).eq('following_id', targetId)
@@ -153,51 +202,33 @@ function GameDetailContent() {
     if (!userProfile) return alert('请先登录！')
     if (likedIds.includes(recruitId)) return alert('你已经赞过这条通缉令啦！')
     if (creatorId === userProfile.id) return alert('不能给自己点赞哦！')
-
     const today = new Date().toISOString().split('T')[0]
     let currentLikeCount = userProfile.last_like_at === today ? (userProfile.daily_like_count || 0) : 0
     if (currentLikeCount >= 5) return alert('你今天已经点赞 5 次啦，明天再来吧！')
 
     try {
-      const { error: likeError } = await supabase.from('likes').insert({ user_id: userProfile.id, recruit_id: recruitId })
-      if (likeError) throw new Error(likeError.message)
-
+      await supabase.from('likes').insert({ user_id: userProfile.id, recruit_id: recruitId })
       const { data: creatorData } = await supabase.from('users_profile').select('experience').eq('id', creatorId).single()
-      if (creatorData) {
-        await supabase.from('users_profile').update({ experience: (creatorData.experience || 0) + 1 }).eq('id', creatorId)
-      }
-
-      await supabase.from('users_profile').update({ 
-        experience: (userProfile.experience || 0) + 1, last_like_at: today, daily_like_count: currentLikeCount + 1
-      }).eq('id', userProfile.id)
-
+      if (creatorData) await supabase.from('users_profile').update({ experience: (creatorData.experience || 0) + 1 }).eq('id', creatorId)
+      await supabase.from('users_profile').update({ experience: (userProfile.experience || 0) + 1, last_like_at: today, daily_like_count: currentLikeCount + 1 }).eq('id', userProfile.id)
       setLikedIds([...likedIds, recruitId])
       setUserProfile({ ...userProfile, experience: (userProfile.experience || 0) + 1, last_like_at: today, daily_like_count: currentLikeCount + 1 })
       alert('点赞成功！双方各获得 1 经验！')
       window.location.reload(); 
-    } catch (err: any) {
-      alert('点赞失败：' + err.message)
-    }
+    } catch (err: any) { alert('点赞失败'); }
   }
 
   async function handlePostRecruit() {
-    if (!playContent || !onlineTime || !platform || !serverRegion) {
-      return setPostMsg('请填写完整：主玩内容、在线时间、游戏平台和区服')
-    }
+    if (!playContent || !onlineTime || !platform || !serverRegion) return setPostMsg('请填写完整')
     if (!userProfile) return setPostMsg('请先登录！')
-
     const { error } = await supabase.from('recruits').insert({
       game_id: gameId, creator_id: userProfile.id, play_content: playContent, online_time: onlineTime, 
       personality: personality, platform: platform, server_region: serverRegion
     })
-
-    if (error) {
-      setPostMsg('发布失败：' + error.message)
-    } else {
+    if (error) setPostMsg('发布失败：' + error.message)
+    else {
       const today = new Date().toISOString().split('T')[0]
-      if (userProfile.last_recruit_at !== today) {
-        await supabase.from('users_profile').update({ experience: (userProfile.experience || 0) + 1, last_recruit_at: today }).eq('id', userProfile.id)
-      }
+      if (userProfile.last_recruit_at !== today) await supabase.from('users_profile').update({ experience: (userProfile.experience || 0) + 1, last_recruit_at: today }).eq('id', userProfile.id)
       setIsPosting(false); setPlayContent(''); setOnlineTime(''); setPersonality(''); setPlatform(''); setServerRegion(''); setPostMsg(''); fetchRecruits()
     }
   }
@@ -209,19 +240,12 @@ function GameDetailContent() {
 
   async function handleReport(recruit: any) {
     if (!userProfile) return alert('请先登录！')
-    const reason = prompt('请输入举报理由（如：诈骗、代练广告、辱骂等）：')
+    const reason = prompt('请输入举报理由：')
     if (!reason || !reason.trim()) return
-
     try {
-      const { error } = await supabase.from('feedbacks').insert({ 
-        user_id: userProfile.id, type: '举报', 
-        content: `举报用户[ID:${recruit.creator.id}]的招募令: ${recruit.play_content}。理由: ${reason}` 
-      })
-      if (error) throw new Error(error.message)
-      alert('举报已提交，巡游天官会尽快处理！')
-    } catch (err: any) {
-      alert('举报发送失败：' + err.message)
-    }
+      await supabase.from('feedbacks').insert({ user_id: userProfile.id, type: '举报', content: `举报用户[ID:${recruit.creator.id}]。理由: ${reason}` })
+      alert('举报已提交！')
+    } catch (err: any) { alert('提交失败'); }
   }
 
   async function handleDeleteRecruit(recruitId: number) {
@@ -240,46 +264,40 @@ function GameDetailContent() {
 
   async function handleSendComment() {
     if (!newComment.trim() || !userProfile || !activeRecruit) return
-    const content = newComment
-    setNewComment('')
-    await supabase.from('comments').insert({ recruit_id: activeRecruit.id, user_id: userProfile.id, content: content })
+    const content = newComment; setNewComment('')
+    await supabase.from('comments').insert({ recruit_id: activeRecruit.id, user_id: userProfile.id, content })
     openComments(activeRecruit)
   }
 
-  // ============ 论坛讨论区逻辑 ============
   async function handlePostForum() {
     if (!forumTitle.trim() || !forumContent.trim()) return setForumMsg('请填写标题和内容')
     if (!userProfile) return setForumMsg('请先登录！')
-
-    const { error } = await supabase.from('posts').insert({
-      game_id: gameId, user_id: userProfile.id, title: forumTitle, content: forumContent
-    })
-
-    if (error) {
-      setForumMsg('发布失败：' + error.message)
-    } else {
-      setIsPostingForum(false); setForumTitle(''); setForumContent(''); setForumMsg(''); fetchPosts()
-    }
+    const { error } = await supabase.from('posts').insert({ game_id: gameId, user_id: userProfile.id, title: forumTitle, content: forumContent })
+    if (error) setForumMsg('发布失败：' + error.message)
+    else { setIsPostingForum(false); setForumTitle(''); setForumContent(''); setForumMsg(''); fetchPosts() }
   }
 
   async function openPost(post: any) {
     setActivePost(post)
-    setCommentLoading(true)
+    setPostCommentLoading(true)
     const { data } = await supabase.from('post_comments').select(`*, user:users_profile(nickname, avatar_url)`).eq('post_id', post.id).order('created_at', { ascending: true })
     if (data) setPostComments(data)
-    setCommentLoading(false)
+    setPostCommentLoading(false)
   }
 
   async function handleSendPostComment() {
     if (!newPostComment.trim() || !userProfile || !activePost) return
-    const content = newPostComment
-    setNewPostComment('')
-    await supabase.from('post_comments').insert({ post_id: activePost.id, user_id: userProfile.id, content: content })
+    const content = newPostComment; setNewPostComment('')
+    await supabase.from('post_comments').insert({ post_id: activePost.id, user_id: userProfile.id, content })
     openPost(activePost)
   }
 
-  if (loading) return <div className="min-h-screen bg-[#050B14] flex items-center justify-center text-cyan-500 animate-pulse">扫描游戏数据中...</div>
+  if (loading) return <div className="min-h-screen bg-[#050B14] flex items-center justify-center text-cyan-500 animate-pulse">扫描数据中...</div>
   if (!game) return <div className="min-h-screen bg-[#050B14] flex items-center justify-center text-red-500">错误：未找到该游戏数据</div>
+
+  // 🔥 核心逻辑判断：是否只显示子模块列表
+  // 如果是主游戏，且有子模块，就不显示招募和讨论区，强制用户往下点
+  const isMainGameWithSubs = !game.parent_id && subGames.length > 0;
 
   return (
     <div className="min-h-screen bg-[#050B14] text-gray-200 relative overflow-hidden pb-20">
@@ -287,11 +305,9 @@ function GameDetailContent() {
       <div className="relative z-10">
         <Navbar />
         
-        {/* 游戏头部 Banner */}
         <div className="h-64 w-full bg-[#0A111F] relative flex items-center justify-center overflow-hidden border-b border-cyan-500/30">
           {game.cover_url ? <img src={game.cover_url} className="absolute inset-0 w-full h-full object-cover opacity-30" /> : <div className="absolute inset-0 opacity-10 bg-[url('/logo.png')] bg-center bg-no-repeat bg-contain"></div>}
           <div className="absolute inset-0 bg-gradient-to-t from-[#050B14] via-transparent to-black/50"></div>
-
           <div className="relative z-10 w-full max-w-4xl px-6 flex flex-col items-center mt-6">
             <h1 className="text-5xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 mb-2 tracking-widest text-center break-all drop-shadow-[0_0_15px_rgba(6,182,212,0.5)] font-orbitron">{game.name}</h1>
             <p className="text-cyan-300 bg-cyan-950/50 border border-cyan-500/50 px-4 py-1.5 rounded-full text-sm backdrop-blur-md">👑 节点创建者: {game.creator?.nickname || '未知'}</p>
@@ -301,24 +317,39 @@ function GameDetailContent() {
 
         <main className="max-w-4xl mx-auto px-4 md:px-6 -mt-10 relative z-20">
           
-          {/* 如果是主游戏，且有子模块，显示子模块列表 */}
-          {subGames.length > 0 ? (
+          {/* 1. 主游戏专属：子模块列表 */}
+          {!game.parent_id && (
             <div className="bg-[#0A111F]/90 backdrop-blur-md border border-cyan-500/30 rounded-2xl p-6 shadow-[0_0_30px_rgba(6,182,212,0.2)] mb-8">
-              <h2 className="text-2xl font-black text-white font-orbitron mb-4 flex items-center gap-2">
-                <span className="text-cyan-400">📂</span> 选择游戏子模块
-              </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                {subGames.map(sub => (
-                  <div key={sub.id} onClick={() => router.push(`/game?id=${sub.id}`)} className="bg-[#050B14] border border-gray-700 p-4 rounded-xl cursor-pointer hover:border-cyan-500 hover:bg-cyan-900/20 transition-all flex items-center gap-3">
-                    {sub.cover_url ? <img src={sub.cover_url} className="w-12 h-12 rounded object-cover" /> : <div className="w-12 h-12 rounded bg-gray-800 flex items-center justify-center text-xl">🎮</div>}
-                    <span className="font-bold text-white truncate">{sub.name}</span>
-                  </div>
-                ))}
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-black text-white font-orbitron flex items-center gap-2">
+                  <span className="text-cyan-400">📂</span> 游戏系列版本
+                </h2>
+                <button onClick={() => setIsCreatingSub(true)} className="bg-fuchsia-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-[0_0_15px_rgba(217,70,239,0.4)] hover:bg-fuchsia-500 transition-all">
+                  + 创建子模块
+                </button>
               </div>
+              
+              {subGames.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  {subGames.map(sub => (
+                    <div key={sub.id} onClick={() => router.push(`/game?id=${sub.id}`)} className="bg-[#050B14] border border-gray-700 p-4 rounded-xl cursor-pointer hover:border-cyan-500 hover:bg-cyan-900/20 transition-all flex items-center gap-3">
+                      {sub.cover_url ? <img src={sub.cover_url} className="w-12 h-12 rounded object-cover" /> : <div className="w-12 h-12 rounded bg-gray-800 flex items-center justify-center text-xl">🎮</div>}
+                      <span className="font-bold text-white truncate">{sub.name}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500 border border-dashed border-gray-700 rounded-xl">
+                  暂无子模块。你可以直接在下方大厅发布主游戏招募，或者点击右上角创建特定版本子模块。
+                </div>
+              )}
             </div>
-          ) : (
-            <>
-              {/* Tab 切换栏 */}
+          )}
+
+          {/* 2. 招募与讨论 Tab 区域 */}
+          {/* 🔥 如果当前是“有子游戏的主游戏”，就不渲染这块内容 */}
+          {!isMainGameWithSubs && (
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
               <div className="flex justify-center mb-8 gap-4">
                 <button onClick={() => setActiveTab('recruit')} className={`px-8 py-3.5 rounded-xl font-black font-orbitron tracking-widest transition-all ${activeTab === 'recruit' ? 'bg-blue-600 text-white shadow-[0_0_20px_rgba(37,99,235,0.5)]' : 'bg-[#0A111F] text-gray-400 border border-gray-700 hover:bg-gray-800'}`}>
                   🚨 招募大厅
@@ -328,9 +359,8 @@ function GameDetailContent() {
                 </button>
               </div>
 
-              {/* ================= 招募大厅视图 ================= */}
               {activeTab === 'recruit' && (
-                <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div>
                   <div className="flex flex-wrap justify-center gap-4 mb-8">
                     <button onClick={() => setIsPosting(true)} className="bg-blue-600 text-white px-8 py-3.5 rounded-xl font-black shadow-[0_0_20px_rgba(37,99,235,0.5)] hover:bg-blue-500 hover:scale-105 transition-all flex items-center gap-2 tracking-widest font-orbitron">
                       <span className="text-xl">🚨</span> 发布招募通缉令
@@ -392,10 +422,8 @@ function GameDetailContent() {
                 </div>
               )}
 
-              {/* ================= 论坛讨论区视图 ================= */}
               {activeTab === 'forum' && (
-                <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                  {/* 🔥 合规警告横幅 */}
+                <div>
                   <div className="mb-6 bg-red-900/20 border border-red-500/50 rounded-xl p-4 flex gap-3 text-sm">
                     <span className="text-2xl">⚠️</span>
                     <div>
@@ -430,10 +458,29 @@ function GameDetailContent() {
                   </div>
                 </div>
               )}
-            </>
+            </div>
           )}
         </main>
       </div>
+
+      {/* 创建子模块弹窗 */}
+      {isCreatingSub && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-[#0A111F]/95 border border-fuchsia-500/50 rounded-2xl p-6 w-full max-w-md shadow-[0_0_30px_rgba(217,70,239,0.3)] relative">
+            <h3 className="text-xl font-black mb-6 text-white text-center font-orbitron">创建游戏子模块</h3>
+            <input className="w-full bg-[#050B14] border border-gray-700 rounded-xl px-4 py-3 text-white outline-none focus:border-fuchsia-500 mb-4" placeholder="子模块名称 (如：使命召唤20)" value={newSubName} onChange={(e) => setNewSubName(e.target.value)} />
+            <div onClick={() => subFileInputRef.current?.click()} className="w-full h-32 border-2 border-dashed border-gray-700 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-fuchsia-500 hover:bg-fuchsia-500/5 transition-all overflow-hidden mb-4">
+              {subCoverPreview ? <img src={subCoverPreview} className="w-full h-full object-cover" /> : <><span className="text-2xl mb-2">🖼️</span><span className="text-gray-400 text-sm">上传子模块封面 (小于500KB)</span></>}
+            </div>
+            <input type="file" className="hidden" ref={subFileInputRef} onChange={handleSubFileChange} />
+            {subCreateMsg && <p className="text-red-400 text-sm text-center mb-4">{subCreateMsg}</p>}
+            <div className="flex gap-4">
+              <button onClick={() => setIsCreatingSub(false)} className="flex-1 bg-gray-800 text-gray-300 py-3 rounded-xl font-bold">取消</button>
+              <button onClick={handleCreateSubGame} className="flex-1 bg-fuchsia-600 text-white py-3 rounded-xl font-black hover:bg-fuchsia-500 shadow-[0_0_15px_rgba(217,70,239,0.4)]">确认创建</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ================= 招募令发帖弹窗 ================= */}
       {isPosting && (
@@ -511,7 +558,6 @@ function GameDetailContent() {
             </div>
             
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              {/* 帖子正文 */}
               <div className="flex gap-4">
                 <img src={activePost.user?.avatar_url || '/logo.png'} className="w-10 h-10 rounded-full border border-gray-600 bg-black" />
                 <div>
@@ -523,7 +569,7 @@ function GameDetailContent() {
               <div className="border-t border-gray-800 pt-6">
                 <h4 className="text-sm text-gray-400 mb-4">全部回复 ({postComments.length})</h4>
                 <div className="space-y-4">
-                  {commentLoading ? <p className="text-center text-gray-500 text-sm">加载中...</p> : postComments.map(c => (
+                  {postCommentLoading ? <p className="text-center text-gray-500 text-sm">加载中...</p> : postComments.map(c => (
                     <div key={c.id} className="flex gap-3">
                       <img src={c.user?.avatar_url || '/logo.png'} className="w-8 h-8 rounded border border-gray-600 object-cover bg-black mt-1" />
                       <div>
