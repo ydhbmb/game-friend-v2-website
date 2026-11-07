@@ -7,16 +7,18 @@ export default function ChatWidget() {
   const [isOpen, setIsOpen] = useState(false)
   const [userProfile, setUserProfile] = useState<any>(null)
   const [contacts, setContacts] = useState<any[]>([])
+  const [following, setFollowing] = useState<any[]>([]) // 我关注的所有人
   const [activeContact, setActiveContact] = useState<any>(null)
   const [messages, setMessages] = useState<any[]>([])
   const [newMsg, setNewMsg] = useState('')
-  const [isBlockedByMe, setIsBlockedByMe] = useState(false)
+  
+  // 分页状态：chat(最近聊天) 或 following(我的关注)
+  const [viewMode, setViewMode] = useState<'chat' | 'following'>('chat')
   
   const bottomRef = useRef<HTMLDivElement>(null)
   const prevMsgLength = useRef(0)
 
   useEffect(() => {
-    // 监听自定义事件，当导航栏点击"消息"时，打开窗口
     const handleOpen = () => setIsOpen(true)
     window.addEventListener('openChatWidget', handleOpen)
 
@@ -27,16 +29,27 @@ export default function ChatWidget() {
       setUserProfile(profile)
       
       if (profile) {
-        const { data: following } = await supabase.from('follows').select('following_id').eq('follower_id', profile.id)
-        const { data: followers } = await supabase.from('follows').select('follower_id').eq('following_id', profile.id)
-        let contactIds: number[] = []
-        if (following) contactIds = [...contactIds, ...following.map(f => f.following_id)]
-        if (followers) contactIds = [...contactIds, ...followers.map(f => f.follower_id)]
-        contactIds = Array.from(new Set(contactIds)).filter(id => id !== profile.id)
+        // 1. 获取互关好友（用于最近聊天列表）
+        const { data: followingData } = await supabase.from('follows').select('following_id').eq('follower_id', profile.id)
+        const { data: followersData } = await supabase.from('follows').select('follower_id').eq('following_id', profile.id)
+        
+        let mutualIds: number[] = []
+        if (followingData && followersData) {
+          const followingIds = followingData.map(f => f.following_id)
+          const followerIds = followersData.map(f => f.follower_id)
+          mutualIds = followingIds.filter(id => followerIds.includes(id))
+        }
 
-        if (contactIds.length > 0) {
-          const { data: contactsData } = await supabase.from('users_profile').select('*').in('id', contactIds)
+        if (mutualIds.length > 0) {
+          const { data: contactsData } = await supabase.from('users_profile').select('*').in('id', mutualIds)
           if (contactsData) setContacts(contactsData)
+        }
+
+        // 2. 获取我关注的所有人（用于"我的关注"列表）
+        if (followingData && followingData.length > 0) {
+          const allFollowingIds = followingData.map(f => f.following_id)
+          const { data: allFollowingData } = await supabase.from('users_profile').select('*').in('id', allFollowingIds)
+          if (allFollowingData) setFollowing(allFollowingData)
         }
       }
     }
@@ -45,7 +58,6 @@ export default function ChatWidget() {
     return () => window.removeEventListener('openChatWidget', handleOpen)
   }, [])
 
-  // 聊天记录轮询
   useEffect(() => {
     let interval: NodeJS.Timeout
     if (activeContact && userProfile && isOpen) {
@@ -68,7 +80,6 @@ export default function ChatWidget() {
           setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
         }
         prevMsgLength.current = data.length
-        // 标记已读
         await supabase.from('messages').update({ is_read: true }).eq('sender_id', contactId).eq('receiver_id', userProfile.id).eq('is_read', false)
       }
     }
@@ -84,7 +95,15 @@ export default function ChatWidget() {
     await supabase.from('messages').insert({ sender_id: userProfile.id, receiver_id: activeContact.id, content })
   }
 
+  function selectContact(contact: any) {
+    setActiveContact(contact)
+    prevMsgLength.current = 0
+  }
+
   if (!isOpen) return null
+
+  // 根据当前 Tab 决定展示的列表
+  const displayList = viewMode === 'chat' ? contacts : following
 
   return (
     <div className="fixed bottom-6 right-6 w-80 h-[500px] bg-[#0A111F] border border-cyan-500/50 rounded-2xl shadow-[0_0_30px_rgba(6,182,212,0.3)] flex flex-col z-[999] overflow-hidden animate-in slide-in-from-bottom-5">
@@ -95,22 +114,46 @@ export default function ChatWidget() {
       </div>
 
       <div className="flex-1 flex overflow-hidden">
-        {/* 左侧联系人 */}
-        <div className={`w-1/3 border-r border-gray-800 bg-[#050B14]/50 overflow-y-auto ${activeContact ? 'hidden' : 'block'}`}>
-          {contacts.map(c => (
-            <div key={c.id} onClick={() => setActiveContact(c)} className="p-2 flex flex-col items-center cursor-pointer hover:bg-cyan-900/20 border-b border-gray-800/50">
-              <img src={c.avatar_url || '/logo.png'} className="w-10 h-10 rounded-full border border-gray-700" />
-              <span className="text-[10px] text-gray-300 mt-1 truncate w-full text-center">{c.nickname}</span>
-            </div>
-          ))}
+        {/* 左侧列表区域 */}
+        <div className={`w-1/3 border-r border-gray-800 bg-[#050B14]/50 flex flex-col ${activeContact ? 'hidden md:flex' : 'flex'}`}>
+          {/* 分页 Tab */}
+          <div className="flex border-b border-gray-800 bg-black/40">
+            <button 
+              onClick={() => { setViewMode('chat'); setActiveContact(null); }} 
+              className={`flex-1 py-2 text-[10px] font-bold ${viewMode === 'chat' ? 'text-cyan-400 border-b-2 border-cyan-500' : 'text-gray-500'}`}
+            >
+              聊天
+            </button>
+            <button 
+              onClick={() => { setViewMode('following'); setActiveContact(null); }} 
+              className={`flex-1 py-2 text-[10px] font-bold ${viewMode === 'following' ? 'text-cyan-400 border-b-2 border-cyan-500' : 'text-gray-500'}`}
+            >
+              关注
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto">
+            {displayList.length === 0 ? (
+               <p className="text-center text-gray-600 text-[10px] mt-4 px-2">
+                 {viewMode === 'chat' ? '暂未建立互关聊天' : '还没有关注任何人'}
+               </p>
+            ) : (
+              displayList.map(c => (
+                <div key={c.id} onClick={() => selectContact(c)} className="p-2 flex flex-col items-center cursor-pointer hover:bg-cyan-900/20 border-b border-gray-800/50">
+                  <img src={c.avatar_url || '/logo.png'} className="w-10 h-10 rounded-full border border-gray-700 object-cover bg-black" />
+                  <span className="text-[10px] text-gray-300 mt-1 truncate w-full text-center">{c.nickname}</span>
+                </div>
+              ))
+            )}
+          </div>
         </div>
 
-        {/* 右侧聊天 */}
-        <div className={`flex-1 flex flex-col ${!activeContact ? 'hidden' : 'flex'}`}>
-          {activeContact && (
+        {/* 右侧聊天区域 */}
+        <div className={`flex-1 flex flex-col ${!activeContact ? 'hidden md:flex' : 'flex'}`}>
+          {activeContact ? (
             <>
               <div className="p-2 bg-black/40 border-b border-gray-800 flex items-center gap-2">
-                <button onClick={() => setActiveContact(null)} className="text-cyan-500 font-bold text-xs">←</button>
+                <button onClick={() => setActiveContact(null)} className="text-cyan-500 font-bold text-xs md:hidden">←</button>
                 <span className="text-xs font-bold text-white truncate">{activeContact.nickname}</span>
               </div>
               <div className="flex-1 overflow-y-auto p-3 space-y-3">
@@ -126,6 +169,13 @@ export default function ChatWidget() {
                 <button onClick={handleSend} className="bg-cyan-600 text-white px-3 py-1 rounded text-xs font-bold">发送</button>
               </div>
             </>
+          ) : (
+            <div className="flex-1 flex items-center justify-center text-gray-600 flex-col p-4 text-center">
+              <p className="text-[10px]">选择好友开始聊天</p>
+              {viewMode === 'following' && (
+                <a href="/following" className="mt-2 text-[10px] text-cyan-500 hover:underline border border-cyan-900 px-2 py-1 rounded">去管理关注分组</a>
+              )}
+            </div>
           )}
         </div>
       </div>
