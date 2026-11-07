@@ -4,8 +4,8 @@ import FeedbackButton from "@/components/FeedbackButton";
 import ChatWidget from "@/components/ChatWidget";
 
 export const metadata: Metadata = {
-  title: "Wingman Games - 找到你的最佳游戏搭子",
-  description: "Wingman Games，为你匹配志同道合的游戏队友。",
+  title: "僚机雷达 - 精准匹配你的神级游戏搭子",
+  description: "僚机雷达 (Wingman Radar)，为你扫描全网最契合的游戏队友。",
 };
 
 export default function RootLayout({
@@ -15,9 +15,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-CN">
-      <body className="antialiased">
+      <body className="antialiased bg-[#050B14] text-gray-200">
         {children}
-        {/* 全局挂载反馈与悬浮聊天框 */}
         <FeedbackButton />
         <ChatWidget />
       </body>

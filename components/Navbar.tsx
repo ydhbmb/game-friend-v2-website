@@ -89,8 +89,8 @@ export default function Navbar() {
     <nav className="bg-[#050B14]/80 backdrop-blur-md border-b border-cyan-900/50 px-4 md:px-6 py-3 flex items-center justify-between sticky top-0 z-50">
       <div className="flex items-center gap-2 md:gap-4">
         <Link href="/" className="flex items-center gap-2 group">
-          <img src="/logo.png" alt="Wingman" className="w-8 h-8 md:w-10 md:h-10 object-contain drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]" />
-          <span className="text-lg md:text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 hidden sm:block tracking-widest font-orbitron">Wingman Games</span>
+          <img src="/logo.png" alt="僚机雷达" className="w-8 h-8 md:w-10 md:h-10 object-contain drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]" />
+          <span className="text-lg md:text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 hidden sm:block tracking-widest font-orbitron">僚机雷达</span>
         </Link>
 
         {userProfile && (
@@ -106,7 +106,6 @@ export default function Navbar() {
         ) : userProfile && levelInfo ? (
           <div className="flex items-center gap-1 md:gap-3 relative">
             
-            {/* 🔥 把原来的 Link 改成 button，点击触发自定义事件 */}
             <button 
               onClick={() => window.dispatchEvent(new Event('openChatWidget'))}
               className="relative text-xs font-bold px-2 py-1.5 rounded-lg text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/20"

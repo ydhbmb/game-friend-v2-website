@@ -25,6 +25,10 @@ export default function RegisterPage() {
   const [msg, setMsg] = useState('')
   const [loading, setLoading] = useState(false)
 
+  // 🔥 用户守则相关状态
+  const [agreed, setAgreed] = useState(false)
+  const [showTerms, setShowTerms] = useState(false)
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value })
   }
@@ -32,6 +36,11 @@ export default function RegisterPage() {
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0]
+      if (file.size > 500 * 1024) {
+        alert('头像不能超过 500KB')
+        e.target.value = ''
+        return
+      }
       setAvatarFile(file)
       setAvatarPreview(URL.createObjectURL(file))
     }
@@ -39,8 +48,12 @@ export default function RegisterPage() {
 
   async function sendCode() {
     setMsg('')
-    const { username, nickname, email, password, superPassword } = formData
+    // 🔥 拦截：必须同意守则
+    if (!agreed) {
+      return setMsg('注册前必须阅读并勾选同意《僚机雷达用户守则》')
+    }
 
+    const { username, nickname, email, password, superPassword } = formData
     if (!username || !nickname || !email || !password || !superPassword) return setMsg('请填写所有必填项')
     if (!/^[a-zA-Z0-9]{3,30}$/.test(username)) return setMsg('用户名必须为3-30位字母或数字')
     if (nickname.length > 9 || nickname.length === 0) return setMsg('昵称长度必须大于0且小于等于9')
@@ -132,32 +145,25 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#09090b] p-4 py-10 relative overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center bg-[#050B14] p-4 py-10 relative overflow-hidden">
       <div className="absolute top-[-10%] left-[-10%] w-[40vw] h-[40vw] bg-fuchsia-600/20 rounded-full blur-[120px] pointer-events-none"></div>
       <div className="absolute bottom-[-10%] right-[-10%] w-[40vw] h-[40vw] bg-cyan-600/20 rounded-full blur-[120px] pointer-events-none"></div>
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#4f4f4f2e_1px,transparent_1px),linear-gradient(to_bottom,#4f4f4f2e_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none [mask-image:linear-gradient(to_bottom,transparent,black,transparent)]"></div>
 
-      <div className="w-full max-w-lg bg-[#111]/80 backdrop-blur-md rounded-2xl border border-cyan-500/30 shadow-[0_0_30px_rgba(6,182,212,0.15)] p-8 space-y-4 relative z-10">
+      <div className="w-full max-w-lg bg-[#0A111F]/90 backdrop-blur-md rounded-2xl border border-cyan-500/30 shadow-[0_0_30px_rgba(6,182,212,0.15)] p-8 space-y-4 relative z-10">
         
         <div className="flex flex-col items-center mb-4">
-          <img src="/logo.png" alt="Wingman Games" className="w-24 h-24 object-contain mb-2 drop-shadow-[0_0_15px_rgba(6,182,212,0.6)]" />
-          <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-fuchsia-500 tracking-widest">
-            Wingman Games
-          </h1>
+          <img src="/logo.png" alt="僚机雷达" className="w-24 h-24 object-contain mb-2 drop-shadow-[0_0_15px_rgba(6,182,212,0.6)]" />
+          <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-fuchsia-500 tracking-widest font-orbitron">建立新节点</h1>
         </div>
 
         {step === 'form' && (
           <>
             <div className="flex flex-col items-center gap-2 mb-4">
               <div className="w-20 h-20 rounded-full bg-black overflow-hidden border-2 border-fuchsia-500/50 shadow-[0_0_15px_rgba(217,70,239,0.4)]">
-                {avatarPreview ? (
-                  <img src={avatarPreview} alt="头像" className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-gray-500 text-xs">无头像</div>
-                )}
+                {avatarPreview ? <img src={avatarPreview} alt="头像" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-gray-500 text-xs">无头像</div>}
               </div>
               <label className="text-cyan-400 text-sm cursor-pointer hover:text-fuchsia-400 transition">
-                上传头像
+                上传全息投影(小于500KB)
                 <input type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
               </label>
             </div>
@@ -188,6 +194,14 @@ export default function RegisterPage() {
               <input name="yy" className="w-full bg-black/60 border border-gray-700 rounded-lg px-2 py-2 text-sm text-white outline-none focus:border-cyan-500" placeholder="YY(选填)" onChange={handleChange} />
             </div>
 
+            {/* 🔥 用户守则勾选区域 */}
+            <div className="flex items-center gap-2 mt-2">
+              <input type="checkbox" id="agree" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="w-4 h-4 accent-cyan-500 cursor-pointer" />
+              <label htmlFor="agree" className="text-xs text-gray-400 cursor-pointer">
+                我已阅读并同意 <span onClick={() => setShowTerms(true)} className="text-cyan-400 hover:underline">《僚机雷达用户守则》</span>
+              </label>
+            </div>
+
             <button onClick={sendCode} disabled={loading} className="w-full bg-gradient-to-r from-fuchsia-600 to-purple-600 text-white rounded-lg py-3 font-bold shadow-[0_0_15px_rgba(217,70,239,0.4)] disabled:opacity-50 mt-4 transition-all hover:from-fuchsia-500 hover:to-purple-500">
               {loading ? '校验中...' : '发送验证码'}
             </button>
@@ -197,13 +211,7 @@ export default function RegisterPage() {
         {step === 'verify' && (
           <>
             <p className="text-sm text-cyan-300 text-center">验证码已发送至：<b>{formData.email}</b></p>
-            <input
-              className="w-full bg-black/60 border border-gray-700 rounded-lg px-4 py-3 text-center text-2xl tracking-widest text-cyan-400 outline-none focus:border-cyan-500"
-              placeholder="8 位验证码"
-              maxLength={8}
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-            />
+            <input className="w-full bg-black/60 border border-gray-700 rounded-lg px-4 py-3 text-center text-2xl tracking-widest text-cyan-400 outline-none focus:border-cyan-500" placeholder="8 位验证码" maxLength={8} value={code} onChange={(e) => setCode(e.target.value)} />
             <button onClick={verifyAndRegister} disabled={loading} className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 text-white rounded-lg py-3 font-bold shadow-[0_0_15px_rgba(6,182,212,0.4)] disabled:opacity-50 transition-all hover:from-cyan-500 hover:to-blue-500">
               {loading ? '注册中...' : '验证并完成注册'}
             </button>
@@ -215,10 +223,32 @@ export default function RegisterPage() {
         
         {step === 'form' && (
           <p className="text-center text-sm text-gray-500 mt-4">
-            已有账号？ <Link href="/login" className="text-cyan-400 hover:text-fuchsia-400 transition">去登录</Link>
+            已有节点？ <a href="/login" className="text-cyan-400 hover:text-fuchsia-400 transition">去登录</a>
           </p>
         )}
       </div>
+
+      {/* 用户守则弹窗 */}
+      {showTerms && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+          <div className="bg-[#0A111F] border border-cyan-500/50 rounded-2xl p-6 md:p-8 w-full max-w-lg shadow-[0_0_50px_rgba(6,182,212,0.3)]">
+            <h2 className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-fuchsia-500 mb-4 font-orbitron text-center">🛡️ 僚机雷达用户守则</h2>
+            <div className="text-sm text-gray-300 space-y-3 max-h-[60vh] overflow-y-auto pr-2">
+              <p>欢迎接入僚机雷达。为了维护良好的星际战术交流环境，请您在注册前仔细阅读并同意以下条款：</p>
+              <p><strong>1. 合法合规：</strong>严禁利用本平台从事任何违反中华人民共和国法律法规的活动，严禁发布涉政、涉黄、涉赌、涉暴恐等违规信息。</p>
+              <p><strong>2. 真实友善：</strong>请勿在交流中恶意辱骂、人身攻击或进行地域黑。禁止发布诈骗、代练、外挂等黑产广告。</p>
+              <p><strong>3. 隐私保护：</strong>请勿在公开场合（如论坛、招募令）随意泄露自己或他人的真实姓名、身份证号、家庭住址等敏感信息。</p>
+              <p><strong>4. 账号安全：</strong>您需对您账号下发生的一切行为负责。如发现账号被盗，请立即通过“超级密码”找回或联系巡游天官。</p>
+              <p><strong>5. 违规处理：</strong>对于违反上述守则的用户，平台有权视情节轻重给予禁言、封号（最高永久封禁）处理，并配合公安机关提供相关数据。</p>
+            </div>
+            <div className="mt-6 flex justify-end">
+              <button onClick={() => { setShowTerms(false); setAgreed(true); }} className="bg-cyan-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-cyan-500 transition shadow-[0_0_10px_rgba(6,182,212,0.4)]">
+                我已阅知并同意
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
