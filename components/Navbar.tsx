@@ -142,6 +142,7 @@ export default function Navbar() {
                     <p className="text-[10px] text-cyan-400">Lv.{levelInfo.level} {levelInfo.name}</p>
                   </div>
                   <Link href={`/profile?id=${userProfile.id}`} onClick={() => setIsMenuOpen(false)} className="block px-4 py-2 text-sm text-gray-300 hover:bg-cyan-500/20">个人主页</Link>
+                  <Link href="/following" onClick={() => setIsMenuOpen(false)} className="block px-4 py-2 text-sm text-gray-300 hover:bg-cyan-500/20">我的关注</Link>
                   <Link href="/user-center" onClick={() => setIsMenuOpen(false)} className="block px-4 py-2 text-sm text-gray-300 hover:bg-cyan-500/20">用户中心</Link>
                   <button onClick={handleLogout} className="block w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-red-500/20">退出登录</button>
                 </div>
