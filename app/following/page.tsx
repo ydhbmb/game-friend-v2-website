@@ -11,9 +11,10 @@ export default function FollowingPage() {
   const router = useRouter()
   const [userProfile, setUserProfile] = useState<any>(null)
   const [followingList, setFollowingList] = useState<any[]>([])
+  const [fansList, setFansList] = useState<any[]>([]) // 🔥 粉丝列表
   const [groups, setGroups] = useState<any[]>([])
-  const [groupMembers, setGroupMembers] = useState<any[]>([]) // 记录谁在哪个组
-  const [activeGroup, setActiveGroup] = useState<string>('all') 
+  const [groupMembers, setGroupMembers] = useState<any[]>([]) 
+  const [activeGroup, setActiveGroup] = useState<string>('all') // 'all', 'fans', 或 具体的分组ID
   const [loading, setLoading] = useState(true)
 
   // 新建分组状态
@@ -21,8 +22,8 @@ export default function FollowingPage() {
   const [newGroupName, setNewGroupName] = useState('')
 
   // 分配分组状态
-  const [assignUser, setAssignUser] = useState<any>(null) // 当前要分配的用户
-  const [userCheckedGroups, setUserCheckedGroups] = useState<number[]>([]) // 选中的组
+  const [assignUser, setAssignUser] = useState<any>(null) 
+  const [userCheckedGroups, setUserCheckedGroups] = useState<number[]>([]) 
 
   // 一键摇人状态
   const [isShaking, setIsShaking] = useState(false)
@@ -38,7 +39,7 @@ export default function FollowingPage() {
       setUserProfile(profile)
 
       if (profile) {
-        // 获取关注的人
+        // 1. 获取我关注的人
         const { data: follows } = await supabase.from('follows').select('following_id').eq('follower_id', profile.id)
         if (follows && follows.length > 0) {
           const ids = follows.map(f => f.following_id)
@@ -46,11 +47,19 @@ export default function FollowingPage() {
           if (profiles) setFollowingList(profiles)
         }
 
-        // 获取分组
+        // 2. 🔥 获取我的粉丝（谁关注了我）
+        const { data: fans } = await supabase.from('follows').select('follower_id').eq('following_id', profile.id)
+        if (fans && fans.length > 0) {
+          const fanIds = fans.map(f => f.follower_id)
+          const { data: fanProfiles } = await supabase.from('users_profile').select('*').in('id', fanIds)
+          if (fanProfiles) setFansList(fanProfiles)
+        }
+
+        // 3. 获取分组
         const { data: gData } = await supabase.from('follow_groups').select('*').eq('user_id', profile.id).order('created_at', { ascending: false })
         if (gData) setGroups(gData)
 
-        // 获取所有组员关系
+        // 4. 获取所有组员关系
         const { data: gmData } = await supabase.from('group_members').select('*')
         if (gmData) setGroupMembers(gmData)
       }
@@ -75,10 +84,19 @@ export default function FollowingPage() {
     setFollowingList(followingList.filter(u => u.id !== targetId))
   }
 
-  // ================ 分配分组逻辑 ================
+  // 🔥 处理回关
+  async function handleFollowBack(targetId: number) {
+    await supabase.from('follows').insert({ follower_id: userProfile.id, following_id: targetId })
+    await supabase.from('notifications').insert({ user_id: targetId, actor_id: userProfile.id, type: 'follow' })
+    
+    // 将这个人加入我的关注列表
+    const { data: profile } = await supabase.from('users_profile').select('*').eq('id', targetId).single()
+    if (profile) setFollowingList([...followingList, profile])
+    alert('回关成功！')
+  }
+
   function openAssignModal(user: any) {
     setAssignUser(user)
-    // 找出该用户目前所在的所有分组
     const currentGroups = groupMembers
       .filter(gm => gm.following_id === user.id)
       .map(gm => gm.group_id)
@@ -87,58 +105,48 @@ export default function FollowingPage() {
 
   async function handleSaveAssignment() {
     if (!assignUser) return
-    
-    // 简单粗暴的覆盖式更新：先删掉该用户的所有分组记录，再重新插入
     await supabase.from('group_members').delete().eq('following_id', assignUser.id)
-    
     if (userCheckedGroups.length > 0) {
       const newRelations = userCheckedGroups.map(gid => ({ group_id: gid, following_id: assignUser.id }))
       await supabase.from('group_members').insert(newRelations)
     }
-
-    // 刷新全局数据
     const { data: gmData } = await supabase.from('group_members').select('*')
     if (gmData) setGroupMembers(gmData)
     setAssignUser(null)
   }
 
-  // ================ 一键摇人逻辑 ================
   async function handleShake() {
     if (!shakeMsg.trim()) return alert('请输入摇人喊话内容')
     setShakeLoading(true)
-
-    // 找出当前分组下所有好友的 ID
     const targetIds = displayUsers.map(u => u.id)
     if (targetIds.length === 0) {
       setShakeLoading(false)
       return alert('当前分组没有任何人')
     }
-
-    // 批量生成私信记录
     const msgs = targetIds.map(tid => ({
       sender_id: userProfile.id,
       receiver_id: tid,
       content: `【战术集结】${shakeMsg}`
     }))
-
     const { error } = await supabase.from('messages').insert(msgs)
-    
     setShakeLoading(false)
-    if (error) {
-      alert('摇人失败：' + error.message)
-    } else {
-      setIsShaking(false)
-      setShakeMsg('')
+    if (error) alert('摇人失败：' + error.message)
+    else {
+      setIsShaking(false); setShakeMsg('')
       alert(`✅ 已成功向当前列表的 ${targetIds.length} 位好友群发战术集结令！`)
     }
   }
 
   // 过滤当前展示的用户
-  const displayUsers = followingList.filter(u => {
-    if (activeGroup === 'all') return true
-    // 看这个人在不在当前选中的分组里
-    return groupMembers.some(gm => gm.group_id.toString() === activeGroup && gm.following_id === u.id)
-  })
+  const displayUsers = activeGroup === 'fans' 
+    ? fansList 
+    : followingList.filter(u => {
+        if (activeGroup === 'all') return true
+        return groupMembers.some(gm => gm.group_id.toString() === activeGroup && gm.following_id === u.id)
+      })
+
+  // 判断是否已互关（在粉丝列表里用）
+  const isMutual = (id: number) => followingList.some(f => f.id === id)
 
   if (loading) return <div className="min-h-screen bg-[#050B14] flex items-center justify-center text-cyan-500 animate-pulse">建立战术连接中...</div>
 
@@ -148,15 +156,24 @@ export default function FollowingPage() {
       
       <main className="max-w-6xl mx-auto p-6 pt-10 flex flex-col md:flex-row gap-6">
         
-        {/* 左侧：分组列表 */}
+        {/* 左侧：导航 */}
         <div className="w-full md:w-1/4 shrink-0">
           <div className="bg-[#0A111F] border border-cyan-500/30 rounded-2xl p-4 shadow-[0_0_20px_rgba(6,182,212,0.1)]">
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-black text-cyan-400 font-orbitron">战术分组</h2>
+              <h2 className="text-lg font-black text-cyan-400 font-orbitron">社交管理</h2>
               <button onClick={() => setIsCreatingGroup(true)} className="text-xs bg-cyan-600 hover:bg-cyan-500 text-white px-2 py-1 rounded">+ 新建</button>
             </div>
             
             <div className="space-y-2">
+              {/* 🔥 新增：我的粉丝 Tab */}
+              <div 
+                onClick={() => setActiveGroup('fans')} 
+                className={`p-3 rounded-xl cursor-pointer transition-all flex justify-between items-center ${activeGroup === 'fans' ? 'bg-fuchsia-900/40 border border-fuchsia-500/50' : 'hover:bg-gray-800'}`}
+              >
+                <span className="font-bold text-sm text-fuchsia-300">👥 我的粉丝</span>
+                <span className="text-xs text-fuchsia-400 bg-black/50 px-2 py-0.5 rounded-full">{fansList.length}</span>
+              </div>
+
               <div 
                 onClick={() => setActiveGroup('all')} 
                 className={`p-3 rounded-xl cursor-pointer transition-all flex justify-between items-center ${activeGroup === 'all' ? 'bg-cyan-900/40 border border-cyan-500/50' : 'hover:bg-gray-800'}`}
@@ -164,6 +181,7 @@ export default function FollowingPage() {
                 <span className="font-bold text-sm text-gray-200">全部关注</span>
                 <span className="text-xs text-cyan-400 bg-black/50 px-2 py-0.5 rounded-full">{followingList.length}</span>
               </div>
+              
               {groups.map(g => {
                 const count = groupMembers.filter(gm => gm.group_id === g.id).length
                 return (
@@ -181,13 +199,13 @@ export default function FollowingPage() {
           </div>
         </div>
 
-        {/* 右侧：关注的人 */}
+        {/* 右侧：人员列表 */}
         <div className="w-full md:w-3/4">
           <div className="flex justify-between items-end mb-6">
             <h1 className="text-2xl font-black text-white font-orbitron">
-              我的关注列表
+              {activeGroup === 'fans' ? '粉丝列表' : '我的关注列表'}
             </h1>
-            {activeGroup !== 'all' && displayUsers.length > 0 && (
+            {activeGroup !== 'all' && activeGroup !== 'fans' && displayUsers.length > 0 && (
               <button onClick={() => setIsShaking(true)} className="bg-fuchsia-600 text-white px-4 py-2 rounded-lg font-bold text-sm shadow-[0_0_15px_rgba(217,70,239,0.4)] hover:bg-fuchsia-500 transition">
                 📢 一键摇人
               </button>
@@ -197,6 +215,7 @@ export default function FollowingPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {displayUsers.map(u => {
               const lvl = calculateLevel(u.experience || 0, u.id)
+              const alreadyFollowing = isMutual(u.id)
               return (
                 <div key={u.id} className="bg-[#0A111F]/80 backdrop-blur-md border border-gray-800 p-4 rounded-2xl flex items-center justify-between hover:border-cyan-500/50 transition-all">
                   <div className="flex items-center gap-3">
@@ -209,19 +228,35 @@ export default function FollowingPage() {
                   <div className="flex flex-col items-end gap-1">
                     <div className="flex gap-2">
                       <button onClick={() => router.push(`/messages?target=${u.id}`)} className="text-xs bg-cyan-900/30 text-cyan-400 border border-cyan-500/30 px-3 py-1 rounded hover:bg-cyan-500/20">私信</button>
-                      <button onClick={() => handleUnfollow(u.id)} className="text-xs text-red-400 hover:text-red-300 px-1">取关</button>
+                      
+                      {/* 粉丝列表显示“回关”按钮，关注列表显示“取关”按钮 */}
+                      {activeGroup === 'fans' ? (
+                        alreadyFollowing ? (
+                          <span className="text-xs text-gray-500 px-1 py-1">已互关</span>
+                        ) : (
+                          <button onClick={() => handleFollowBack(u.id)} className="text-xs text-fuchsia-400 hover:text-fuchsia-300 font-bold px-1 py-1">回关</button>
+                        )
+                      ) : (
+                        <button onClick={() => handleUnfollow(u.id)} className="text-xs text-red-400 hover:text-red-300 px-1 py-1">取关</button>
+                      )}
                     </div>
-                    <button onClick={() => openAssignModal(u)} className="text-[10px] text-gray-500 hover:text-white underline mt-1">管理分组</button>
+                    {activeGroup !== 'fans' && (
+                      <button onClick={() => openAssignModal(u)} className="text-[10px] text-gray-500 hover:text-white underline mt-1">管理分组</button>
+                    )}
                   </div>
                 </div>
               )
             })}
-            {displayUsers.length === 0 && <p className="col-span-full text-gray-500 py-10 text-center border border-dashed border-gray-800 rounded-xl">当前分组下没有任何好友。</p>}
+            {displayUsers.length === 0 && (
+              <p className="col-span-full text-gray-500 py-10 text-center border border-dashed border-gray-800 rounded-xl">
+                {activeGroup === 'fans' ? '还没有粉丝关注你，快去大厅活跃一下吧！' : '当前列表没有任何好友。'}
+              </p>
+            )}
           </div>
         </div>
       </main>
 
-      {/* 新建分组弹窗 */}
+      {/* 新建分组弹窗、分配分组弹窗、摇人弹窗保持不变，这里省略不重复写了 */}
       {isCreatingGroup && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
           <div className="bg-[#0A111F] border border-cyan-500/50 rounded-2xl p-6 w-full max-w-sm">
@@ -235,7 +270,6 @@ export default function FollowingPage() {
         </div>
       )}
 
-      {/* 分配分组弹窗 */}
       {assignUser && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
           <div className="bg-[#0A111F] border border-cyan-500/50 rounded-2xl p-6 w-full max-w-sm">
@@ -265,7 +299,6 @@ export default function FollowingPage() {
         </div>
       )}
 
-      {/* 一键摇人弹窗 */}
       {isShaking && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
           <div className="bg-[#0A111F] border border-fuchsia-500/50 rounded-2xl p-6 w-full max-w-md shadow-[0_0_30px_rgba(217,70,239,0.3)]">
