@@ -127,6 +127,12 @@ export default function Navbar() {
               <div className="flex items-center gap-2 cursor-pointer select-none" onClick={() => setIsMenuOpen(!isMenuOpen)}>
                 <img src={userProfile.avatar_url || '/logo.png'} className="w-8 h-8 rounded-full object-cover border border-cyan-500 shadow-[0_0_10px_rgba(6,182,212,0.5)]" />
                 <div className="hidden lg:flex flex-col">
+                  {/* 🔥 称号展示 */}
+                  {userProfile.equipped_title && (
+                    <span className="text-[10px] font-black text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-400 to-cyan-400 border border-fuchsia-500/30 px-1.5 rounded w-max shadow-[0_0_8px_rgba(217,70,239,0.3)]">
+                      {userProfile.equipped_title}
+                    </span>
+                  )}
                   <div className="flex items-center gap-1">
                     <span className="text-sm font-bold text-gray-200">{userProfile.nickname}</span>
                     <span className="text-[10px] bg-cyan-900/50 text-cyan-300 px-1.5 py-0.5 rounded border border-cyan-500/30">Lv.{levelInfo.level}</span>
@@ -138,6 +144,7 @@ export default function Navbar() {
               {isMenuOpen && (
                 <div className="absolute top-full right-0 mt-2 w-36 bg-[#0A111F] border border-cyan-500/30 rounded-xl shadow-xl py-2">
                   <div className="lg:hidden px-4 py-2 border-b border-gray-700 mb-1">
+                    {userProfile.equipped_title && <p className="text-[10px] text-fuchsia-400 font-bold mb-1">{userProfile.equipped_title}</p>}
                     <p className="text-xs text-white font-bold">{userProfile.nickname}</p>
                     <p className="text-[10px] text-cyan-400">Lv.{levelInfo.level} {levelInfo.name}</p>
                   </div>
