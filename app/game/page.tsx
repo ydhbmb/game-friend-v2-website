@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, Suspense } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Navbar from '@/components/Navbar'
+import FollowUserButton from '@/components/FollowUserButton'
 
 function GameDetailContent() {
   const searchParams = useSearchParams()
@@ -19,6 +20,7 @@ function GameDetailContent() {
   const [followedIds, setFollowedIds] = useState<number[]>([])
   const [isFollowingGame, setIsFollowingGame] = useState(false)
   const [likedIds, setLikedIds] = useState<number[]>([])
+  const [followedRecruitIds, setFollowedRecruitIds] = useState<number[]>([]) // 🔥 我关注的悬赏令
   const [loading, setLoading] = useState(true)
   
   const [activeTab, setActiveTab] = useState<'recruit' | 'forum'>('recruit')
@@ -74,6 +76,8 @@ function GameDetailContent() {
             if (followsData) setFollowedIds(followsData.map(f => f.following_id))
             const { data: likesData } = await supabase.from('likes').select('recruit_id').eq('user_id', data.id)
             if (likesData) setLikedIds(likesData.map(l => l.recruit_id))
+            const { data: rfData } = await supabase.from('recruit_follows').select('recruit_id').eq('user_id', data.id)
+            if (rfData) setFollowedRecruitIds(rfData.map(r => r.recruit_id))
             const { data: gameFollowData } = await supabase.from('game_follows').select('id').eq('user_id', data.id).eq('game_id', gameId).single()
             if (gameFollowData) setIsFollowingGame(true)
           }
@@ -101,7 +105,12 @@ function GameDetailContent() {
 
   async function fetchRecruits() {
     if (!gameId) return
-    const { data } = await supabase.from('recruits').select(`*, creator:users_profile(nickname, avatar_url, id)`).eq('game_id', gameId).order('created_at', { ascending: false }) 
+    // 🔥 核心改动：查询 likes(id)，用数组长度来统计点赞数
+    const { data } = await supabase
+      .from('recruits')
+      .select(`*, creator:users_profile(nickname, avatar_url, id), likes(id)`)
+      .eq('game_id', gameId)
+      .order('created_at', { ascending: false }) 
     if (data) setRecruits(data)
   }
 
@@ -129,7 +138,7 @@ function GameDetailContent() {
         const fileName = `subgame-${Date.now()}.${subCoverFile.name.split('.').pop()}`
         const { error } = await supabase.storage.from('game_covers').upload(fileName, subCoverFile)
         if (!error) {
-          const { data } = supabase.storage.from('game_covers').getPublicUrl(fileName)
+          const { data } = await supabase.storage.from('game_covers').getPublicUrl(fileName)
           coverUrl = data.publicUrl
         }
       }
@@ -153,44 +162,17 @@ function GameDetailContent() {
     } catch (err: any) {}
   }
 
-  // 🔥 核心更新：关注逻辑（带自动发成就）
-  async function handleFollow(targetId: number) {
+  // 关注悬赏令
+  async function toggleFollowRecruit(recruitId: number, e: React.MouseEvent) {
+    e.preventDefault()
     if (!userProfile) return alert('请先登录！')
-    if (targetId === userProfile.id) return
-    
-    const isFollowed = followedIds.includes(targetId)
+    const isFollowed = followedRecruitIds.includes(recruitId)
     if (isFollowed) {
-      await supabase.from('follows').delete().eq('follower_id', userProfile.id).eq('following_id', targetId)
-      setFollowedIds(followedIds.filter(id => id !== targetId))
+      await supabase.from('recruit_follows').delete().eq('user_id', userProfile.id).eq('recruit_id', recruitId)
+      setFollowedRecruitIds(followedRecruitIds.filter(id => id !== recruitId))
     } else {
-      // 1. 先插入关注记录
-      await supabase.from('follows').insert({ follower_id: userProfile.id, following_id: targetId })
-      await supabase.from('notifications').insert({ user_id: targetId, actor_id: userProfile.id, type: 'follow' })
-      setFollowedIds([...followedIds, targetId])
-
-      // 2. 检查被关注者的粉丝数，判断是否触发成就
-      const { count } = await supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', targetId)
-      const fanCount = (count || 0) + 1 // 算上刚刚关注的这次
-      
-      let titleToUnlock = ''
-      if (fanCount === 5) titleToUnlock = '人气新星'
-      if (fanCount === 10) titleToUnlock = '社交达人'
-      if (fanCount === 50) titleToUnlock = '电竞明星'
-
-      if (titleToUnlock) {
-        // 查一下这个称号对应的 ID
-        const { data: ach } = await supabase.from('achievements').select('id').eq('title', titleToUnlock).single()
-        if (ach) {
-          // 写入成就记录并发送通知（以防重复，用 upsert 或者 try-catch）
-          try {
-            await supabase.from('user_achievements').insert({ user_id: targetId, achievement_id: ach.id })
-            await supabase.from('notifications').insert({ 
-              user_id: targetId, actor_id: userProfile.id, type: 'comment', 
-              content: `恭喜你解锁了全新称号【${titleToUnlock}】！请前往用户中心佩戴。` 
-            })
-          } catch (e) { /* 已经有这个成就了，忽略报错 */ }
-        }
-      }
+      await supabase.from('recruit_follows').insert({ user_id: userProfile.id, recruit_id: recruitId })
+      setFollowedRecruitIds([...followedRecruitIds, recruitId])
     }
   }
 
@@ -208,7 +190,8 @@ function GameDetailContent() {
       await supabase.from('users_profile').update({ experience: (userProfile.experience || 0) + 1, last_like_at: today, daily_like_count: currentLikeCount + 1 }).eq('id', userProfile.id)
       setLikedIds([...likedIds, recruitId])
       setUserProfile({ ...userProfile, experience: (userProfile.experience || 0) + 1, last_like_at: today, daily_like_count: currentLikeCount + 1 })
-      alert('点赞成功！双方各获得 1 经验！'); window.location.reload(); 
+      alert('点赞成功！双方各获得 1 经验！')
+      fetchRecruits() // 重新拉取以刷新点赞数
     } catch (err: any) { alert('点赞失败'); }
   }
 
@@ -340,13 +323,16 @@ function GameDetailContent() {
                 <div>
                   <div className="flex flex-wrap justify-center gap-4 mb-8">
                     <button onClick={() => setIsPosting(true)} className="bg-blue-600 text-white px-8 py-3.5 rounded-xl font-black shadow-[0_0_20px_rgba(37,99,235,0.5)] hover:bg-blue-500 hover:scale-105 transition-all flex items-center gap-2 tracking-widest font-orbitron"><span className="text-xl">🚨</span> 发布招募通缉令</button>
-                    <button onClick={toggleFollowGame} className={`px-8 py-3.5 rounded-xl font-black shadow-lg transition-all flex items-center gap-2 tracking-widest font-orbitron border ${isFollowingGame ? 'bg-gray-800 text-gray-300 border-gray-600' : 'bg-transparent text-cyan-400 border-cyan-500 hover:bg-cyan-500/10'}`}>{isFollowingGame ? '✅ 已订阅本频道' : '🔔 订阅频道更新'}</button>
+                    <button onClick={toggleFollowGame} className={`px-8 py-3.5 rounded-xl font-black shadow-lg transition-all flex items-center gap-2 tracking-widest font-orbitron border ${isFollowingGame ? 'bg-gray-800 text-gray-300 border-gray-600' : 'bg-transparent text-cyan-400 border-cyan-500 hover:bg-cyan-500/10'}`}>{isFollowingGame ? '✅ 已订阅游戏频道' : '🔔 订阅游戏频道'}</button>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
                     {recruits.map((recruit, index) => {
                       const isFirstBlood = index === recruits.length - 1;
                       const isClosed = recruit.is_closed;
+                      const likeCount = recruit.likes?.length || 0; // 🔥 获取点赞数
+                      const isRecruitFollowed = followedRecruitIds.includes(recruit.id); // 🔥 是否关注了此帖
+
                       return (
                         <div key={recruit.id} className={`relative bg-[#0A111F]/90 backdrop-blur-md rounded-xl border border-cyan-900/50 overflow-hidden flex flex-col group transition-all duration-300 ${isClosed ? 'opacity-60 grayscale-[0.5]' : 'hover:border-cyan-400 hover:shadow-[0_0_20px_rgba(6,182,212,0.2)]'}`}>
                           {isClosed && <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none"><div className="border-4 border-red-500 text-red-500 text-4xl font-black font-orbitron px-6 py-2 rounded-lg transform -rotate-12 opacity-80 bg-black/40 backdrop-blur-sm">已满 / 结案</div></div>}
@@ -372,18 +358,27 @@ function GameDetailContent() {
                                   <div className="flex items-center gap-2">
                                     <p className="text-[15px] font-bold text-white">{recruit.creator?.nickname}</p>
                                     {isFirstBlood && <span className="text-[9px] bg-red-500/20 text-red-400 border border-red-500/50 px-1.5 py-0.5 rounded shadow-[0_0_8px_rgba(239,68,68,0.5)]">🩸 首杀</span>}
+                                    {/* 🔥 发布者关注按钮 */}
+                                    <FollowUserButton targetId={recruit.creator?.id} currentUserId={userProfile?.id} />
                                   </div>
                                   <p className="text-xs text-fuchsia-400 font-mono">ID: {recruit.creator?.id}</p>
                                 </div>
                               </div>
                               <div className="flex gap-2">
-                                <button disabled={isClosed} onClick={() => handleLike(recruit.id, recruit.creator.id)} className={`px-3 py-1.5 rounded text-xs font-bold border ${likedIds.includes(recruit.id) ? 'bg-red-900/40 text-red-400 border-red-500/50' : 'bg-transparent text-gray-400 border-gray-600 hover:bg-red-500/20 hover:text-red-400'}`}>{likedIds.includes(recruit.id) ? '❤️ 已赞' : '🤍 点赞'}</button>
-                                {userProfile && userProfile.id !== recruit.creator?.id && <button disabled={isClosed} onClick={() => handleFollow(recruit.creator.id)} className={`px-3 py-1.5 rounded text-xs font-bold border ${followedIds.includes(recruit.creator.id) ? 'bg-cyan-900/40 text-cyan-400 border-cyan-500/50' : 'bg-transparent text-blue-400 border-blue-500/50 hover:bg-blue-500/20'}`}>{followedIds.includes(recruit.creator.id) ? '已关注' : '+ 关注'}</button>}
+                                <button disabled={isClosed} onClick={() => handleLike(recruit.id, recruit.creator.id)} className={`px-3 py-1.5 rounded text-xs font-bold border ${likedIds.includes(recruit.id) ? 'bg-red-900/40 text-red-400 border-red-500/50' : 'bg-transparent text-gray-400 border-gray-600 hover:bg-red-500/20 hover:text-red-400'}`}>
+                                  {likedIds.includes(recruit.id) ? `❤️ 已赞 (${likeCount})` : `🤍 点赞 (${likeCount})`}
+                                </button>
                               </div>
                             </div>
                           </div>
                           <div className="flex border-t border-blue-500/30 bg-[#050B14]/80 divide-x divide-blue-500/30">
                             <button onClick={() => openComments(recruit)} className="flex-1 py-3.5 text-cyan-400 text-sm font-bold hover:bg-cyan-500/10 transition">💬 留言</button>
+                            
+                            {/* 🔥 悬赏令关注按钮 */}
+                            <button onClick={(e) => toggleFollowRecruit(recruit.id, e)} className={`flex-1 py-3.5 text-sm font-bold transition ${isRecruitFollowed ? 'text-gray-500' : 'text-yellow-400 hover:bg-yellow-500/10'}`}>
+                              {isRecruitFollowed ? '✅ 已关注此帖' : '🔔 关注此帖'}
+                            </button>
+
                             {userProfile && userProfile.id === recruit.creator?.id && <button onClick={() => handleCloseRecruit(recruit.id, isClosed)} className={`flex-1 py-3.5 text-sm font-bold transition ${isClosed ? 'text-yellow-400 hover:bg-yellow-500/10' : 'text-gray-400 hover:bg-gray-500/10'}`}>{isClosed ? '🔓 重开' : '✅ 结案'}</button>}
                             <button onClick={() => handleReport(recruit)} className="flex-1 py-3.5 text-red-400 text-sm font-bold hover:bg-red-500/10 transition">🚩 举报</button>
                             {!isClosed && <button onClick={() => router.push(`/messages?target=${recruit.creator.id}`)} className="flex-1 py-3.5 text-blue-400 text-sm font-bold hover:bg-blue-500/10 transition">✉️ 私信</button>}
@@ -420,6 +415,8 @@ function GameDetailContent() {
                               <p className="text-sm text-gray-400 line-clamp-2 mb-3">{post.content}</p>
                               <div className="flex items-center gap-4 text-xs text-gray-500 font-mono">
                                 <span>{post.user?.nickname}</span>
+                                {/* 帖子发布者的关注按钮 */}
+                                <FollowUserButton targetId={post.user?.id} currentUserId={userProfile?.id} />
                                 <span>{new Date(post.created_at).toLocaleString()}</span>
                               </div>
                            </div>
@@ -434,6 +431,7 @@ function GameDetailContent() {
         </main>
       </div>
 
+      {/* 各种弹窗保持不变... 因为你没要求改弹窗 */}
       {isCreatingSub && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-[#0A111F]/95 border border-fuchsia-500/50 rounded-2xl p-6 w-full max-w-md shadow-[0_0_30px_rgba(217,70,239,0.3)] relative">
