@@ -17,6 +17,9 @@ export default function UserCenterPage() {
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [avatarPreview, setAvatarPreview] = useState('')
 
+  // 🔥 成就与称号状态
+  const [myAchievements, setMyAchievements] = useState<any[]>([])
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       if (data.user) {
@@ -25,6 +28,7 @@ export default function UserCenterPage() {
             setProfile(p)
             setNickname(p.nickname || '')
             setAvatarPreview(p.avatar_url || '')
+            fetchAchievements(p.id)
           }
         })
       } else {
@@ -33,10 +37,19 @@ export default function UserCenterPage() {
     })
   }, [router])
 
+  async function fetchAchievements(userId: number) {
+    // 联表查询：查出该用户解锁的所有成就
+    const { data } = await supabase
+      .from('user_achievements')
+      .select(`*, achievement:achievements(*)`)
+      .eq('user_id', userId)
+    
+    if (data) setMyAchievements(data)
+  }
+
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0]
-      // 🔥 头像大小限制 500KB
       if (file.size > 500 * 1024) {
         alert('头像图片不能超过 500KB，请压缩后再上传！')
         e.target.value = ''
@@ -105,19 +118,31 @@ export default function UserCenterPage() {
     }
   }
 
+  // 🔥 佩戴称号
+  async function equipTitle(title: string | null) {
+    setLoading(true)
+    const { error } = await supabase.from('users_profile').update({ equipped_title: title }).eq('id', profile.id)
+    setLoading(false)
+    if (!error) {
+      setProfile({ ...profile, equipped_title: title })
+      alert(title ? `成功佩戴称号：${title}` : '已隐藏当前称号')
+    }
+  }
+
   if (!profile) return <div className="min-h-screen bg-[#050B14]"></div>
 
   const levelInfo = calculateLevel(profile.experience || 0, profile.id)
   const progressPercent = levelInfo.isMaxLevel ? 100 : Math.min(100, Math.floor((levelInfo.currentLevelExp / levelInfo.nextLevelExp) * 100))
 
   return (
-    <div className="min-h-screen bg-[#050B14] text-gray-200">
+    <div className="min-h-screen bg-[#050B14] text-gray-200 pb-20">
       <Navbar />
       <div className="max-w-2xl mx-auto p-6 mt-10 bg-[#0A111F]/80 border border-cyan-500/30 rounded-2xl shadow-[0_0_30px_rgba(6,182,212,0.15)] backdrop-blur-md">
         <h1 className="text-2xl font-black text-cyan-400 mb-6 border-b border-gray-800 pb-4 font-orbitron">用户中心</h1>
         
         {msg && <div className={`mb-4 p-2 rounded font-bold ${msg.includes('成功') ? 'text-green-400 bg-green-400/10' : 'text-red-400 bg-red-400/10'}`}>{msg}</div>}
 
+        {/* 赛博等级面板 */}
         <div className="mb-8 p-5 bg-black/40 border border-cyan-900/50 rounded-xl relative overflow-hidden">
           <div className="flex justify-between items-end mb-2 relative z-10">
             <div>
@@ -136,6 +161,35 @@ export default function UserCenterPage() {
             <div className="w-full h-3 bg-gray-900 rounded-full overflow-hidden border border-gray-700">
               <div className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 shadow-[0_0_10px_rgba(6,182,212,0.8)] transition-all duration-1000" style={{ width: `${progressPercent}%` }}></div>
             </div>
+          </div>
+        </div>
+
+        {/* 🔥 荣誉殿堂 */}
+        <div className="mb-8 p-5 bg-gradient-to-br from-fuchsia-900/20 to-transparent border border-fuchsia-500/30 rounded-xl">
+          <div className="flex justify-between items-center mb-4 border-b border-fuchsia-500/20 pb-2">
+            <h2 className="text-lg font-black text-fuchsia-400 font-orbitron flex items-center gap-2">🏆 荣誉殿堂</h2>
+            <button onClick={() => equipTitle(null)} className="text-[10px] text-gray-400 hover:text-white underline">隐藏当前称号</button>
+          </div>
+          
+          <div className="flex flex-wrap gap-3">
+            {myAchievements.map(a => {
+              const isEquipped = profile.equipped_title === a.achievement?.title
+              return (
+                <div 
+                  key={a.id} 
+                  onClick={() => equipTitle(a.achievement?.title)}
+                  className={`cursor-pointer px-4 py-2 rounded-lg border text-sm transition-all flex flex-col items-center justify-center min-w-[100px] ${
+                    isEquipped 
+                      ? 'bg-fuchsia-600/30 border-fuchsia-500 text-white shadow-[0_0_15px_rgba(217,70,239,0.3)] scale-105' 
+                      : 'bg-black/40 border-gray-700 text-gray-400 hover:border-fuchsia-500/50'
+                  }`}
+                >
+                  <span className="font-bold text-base mb-1">{a.achievement?.title}</span>
+                  <span className="text-[10px] opacity-70">{a.achievement?.name}</span>
+                </div>
+              )
+            })}
+            {myAchievements.length === 0 && <p className="text-xs text-gray-500">还没有解锁任何称号，快去社交或签到吧！</p>}
           </div>
         </div>
 
