@@ -53,7 +53,6 @@ export default function HomePage() {
 
   async function fetchGames(keyword = '') {
     try {
-      // 🔥 只查 parent_id 为空的主游戏
       let query = supabase.from('games').select(`*, creator:users_profile(nickname)`).is('parent_id', null).order('created_at', { ascending: false })
       if (keyword) query = query.ilike('name', `%${keyword}%`)
       const { data, error } = await query
@@ -76,7 +75,6 @@ export default function HomePage() {
     e.preventDefault()
     e.stopPropagation()
     if (!userProfile) return alert('请先登录！')
-
     try {
       const isFollowed = followedGameIds.includes(gameId)
       if (isFollowed) {
@@ -86,19 +84,13 @@ export default function HomePage() {
         await supabase.from('game_follows').insert({ user_id: userProfile.id, game_id: gameId })
         setFollowedGameIds([...followedGameIds, gameId])
       }
-    } catch (err: any) {
-      alert('操作失败：' + err.message)
-    }
+    } catch (err: any) { alert('操作失败：' + err.message) }
   }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0]
-      if (file.size > 500 * 1024) {
-        alert('封面图片不能超过 500KB，请压缩后再上传！')
-        e.target.value = ''
-        return
-      }
+      if (file.size > 500 * 1024) return alert('封面图片不能超过 500KB')
       setCoverFile(file)
       setCoverPreview(URL.createObjectURL(file))
     }
@@ -118,14 +110,9 @@ export default function HomePage() {
           coverUrl = data.publicUrl
         }
       }
-      // 创建主游戏时，parent_id 为 null
       await supabase.from('games').insert({ name: newGameName, creator_id: userProfile.id, cover_url: coverUrl, parent_id: null })
       setIsModalOpen(false); setNewGameName(''); setCoverFile(null); setCoverPreview(''); fetchGames() 
-    } catch (err: any) {
-      setCreateMsg('创建失败：' + err.message)
-    } finally {
-      setUploading(false)
-    }
+    } catch (err: any) { setCreateMsg('创建失败：' + err.message) } finally { setUploading(false) }
   }
 
   async function handleUpdateName(gameId: number, oldName: string) {
@@ -136,7 +123,7 @@ export default function HomePage() {
   }
 
   async function handleDeleteGame(gameId: number) {
-    if (!confirm('⚠️ 警告：确定要彻底删除这个游戏模块以及里面的所有子模块吗？此操作不可逆！')) return
+    if (!confirm('⚠️ 警告：确定要彻底删除这个游戏模块以及里面的所有子模块吗？')) return
     await supabase.from('games').delete().eq('id', gameId)
     fetchGames()
   }
@@ -157,8 +144,6 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-[#050B14] text-gray-200 relative overflow-hidden font-sans">
-      
-      {/* 🔥 雷达背景特效 */}
       <div className="fixed inset-0 z-0 pointer-events-none">
         <div className="absolute inset-0 bg-[url('/bg.png')] bg-cover bg-center bg-no-repeat opacity-60"></div>
         <div className="absolute inset-0 bg-gradient-to-b from-[#050B14]/60 via-[#050B14]/80 to-[#050B14]"></div>
@@ -172,7 +157,8 @@ export default function HomePage() {
             <img src="/banner.png" alt="Wingman Radar" className="w-full max-w-4xl object-contain drop-shadow-[0_0_30px_rgba(6,182,212,0.6)] animate-pulse-glow rounded-2xl" />
           </div>
 
-          <div className="mb-8 w-full max-w-4xl mx-auto">
+          {/* 战队大厅入口 */}
+          <div className="mb-4 w-full max-w-4xl mx-auto">
             <Link href="/teams" className="group relative flex items-center justify-between p-6 bg-gradient-to-r from-cyan-900/40 to-blue-900/40 border border-cyan-500/30 rounded-2xl hover:border-cyan-400 transition-all shadow-[0_0_20px_rgba(6,182,212,0.2)] hover:shadow-[0_0_30px_rgba(6,182,212,0.4)] overflow-hidden backdrop-blur-sm">
               <div className="absolute inset-0 bg-[url('/logo.png')] bg-right bg-no-repeat bg-contain opacity-5 pointer-events-none group-hover:scale-110 transition-transform"></div>
               <div className="relative z-10">
@@ -180,6 +166,17 @@ export default function HomePage() {
                 <p className="text-sm text-cyan-500/70 font-mono">// 加入战队，寻找你的最强僚机</p>
               </div>
               <div className="relative z-10 text-cyan-400 group-hover:translate-x-2 transition-transform text-2xl">→</div>
+            </Link>
+          </div>
+
+          {/* 僚机盲盒入口 */}
+          <div className="mb-8 w-full max-w-4xl mx-auto">
+            <Link href="/gacha" className="group relative flex items-center justify-between p-6 bg-gradient-to-r from-fuchsia-900/40 to-cyan-900/40 border border-fuchsia-500/30 rounded-2xl hover:border-fuchsia-400 transition-all shadow-[0_0_20px_rgba(217,70,239,0.2)] hover:shadow-[0_0_30px_rgba(217,70,239,0.4)] overflow-hidden backdrop-blur-sm">
+              <div className="relative z-10">
+                <h2 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-400 to-cyan-400 font-orbitron mb-1">🎰 僚机盲盒</h2>
+                <p className="text-sm text-fuchsia-500/70 font-mono">// 消耗运气，抽一张你的天选卡片</p>
+              </div>
+              <div className="relative z-10 text-fuchsia-400 group-hover:translate-x-2 transition-transform text-2xl">→</div>
             </Link>
           </div>
 

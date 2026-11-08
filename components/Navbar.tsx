@@ -141,6 +141,7 @@ export default function Navbar() {
                     <p className="text-xs text-white font-bold">{userProfile.nickname}</p>
                     <p className="text-[10px] text-cyan-400">Lv.{levelInfo.level} {levelInfo.name}</p>
                   </div>
+                  <Link href="/gacha" onClick={() => setIsMenuOpen(false)} className="block px-4 py-2 text-sm text-yellow-400 font-bold hover:bg-yellow-500/20">🎰 僚机盲盒</Link>
                   <Link href={`/profile?id=${userProfile.id}`} onClick={() => setIsMenuOpen(false)} className="block px-4 py-2 text-sm text-gray-300 hover:bg-cyan-500/20">个人主页</Link>
                   <Link href="/following" onClick={() => setIsMenuOpen(false)} className="block px-4 py-2 text-sm text-gray-300 hover:bg-cyan-500/20">我的关注</Link>
                   <Link href="/user-center" onClick={() => setIsMenuOpen(false)} className="block px-4 py-2 text-sm text-gray-300 hover:bg-cyan-500/20">用户中心</Link>
