@@ -15,18 +15,18 @@ import ModalForumDetail from '@/components/ModalForumDetail'
 function GameDetailContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
-  const gameId = searchParams.get('id') 
+  const gameId = searchParams.get('id')
 
   const [game, setGame] = useState<any>(null)
   const [subGames, setSubGames] = useState<any[]>([])
   const [userProfile, setUserProfile] = useState<any>(null)
   const [recruits, setRecruits] = useState<any[]>([])
-  const [posts, setPosts] = useState<any[]>([]) 
+  const [posts, setPosts] = useState<any[]>([])
   const [followedRecruitIds, setFollowedRecruitIds] = useState<number[]>([])
   const [likedIds, setLikedIds] = useState<number[]>([])
   const [isFollowingGame, setIsFollowingGame] = useState(false)
   const [loading, setLoading] = useState(true)
-  
+
   const [activeTab, setActiveTab] = useState<'recruit' | 'forum'>('recruit')
 
   const [isPostingRecruit, setIsPostingRecruit] = useState(false)
@@ -39,7 +39,7 @@ function GameDetailContent() {
 
   useEffect(() => {
     async function init() {
-      if (!gameId) return 
+      if (!gameId) return
       try {
         const { data: { user } } = await supabase.auth.getUser()
         if (user) {
@@ -70,7 +70,7 @@ function GameDetailContent() {
   }, [gameId])
 
   async function fetchRecruits() {
-    const { data } = await supabase.from('recruits').select(`*, creator:users_profile(nickname, avatar_url, id), likes(id)`).eq('game_id', gameId).order('created_at', { ascending: false }) 
+    const { data } = await supabase.from('recruits').select(`*, creator:users_profile(nickname, avatar_url, id), likes(id)`).eq('game_id', gameId).order('created_at', { ascending: false })
     if (data) setRecruits(data)
   }
 
@@ -101,31 +101,35 @@ function GameDetailContent() {
     }
   }
 
+  // 点赞：走 RPC，防重复 / 每日限次 / 双方加经验全在数据库里完成
   async function handleLike(recruitId: number, creatorId: number) {
     if (!userProfile) return alert('请先登录！')
     if (likedIds.includes(recruitId)) return alert('你已经赞过这条通缉令啦！')
     if (creatorId === userProfile.id) return alert('不能给自己点赞哦！')
+
+    const { error } = await supabase.rpc('give_like', { p_recruit_id: recruitId })
+
+    if (error) {
+      alert(error.message)
+      return
+    }
+
     const today = new Date().toISOString().split('T')[0]
-    let currentLikeCount = userProfile.last_like_at === today ? (userProfile.daily_like_count || 0) : 0
-    if (currentLikeCount >= 5) return alert('你今天已经点赞 5 次啦，明天再来吧！')
-    try {
-      await supabase.from('likes').insert({ user_id: userProfile.id, recruit_id: recruitId })
-      const { data: creatorData } = await supabase.from('users_profile').select('experience').eq('id', creatorId).single()
-      if (creatorData) await supabase.from('users_profile').update({ experience: (creatorData.experience || 0) + 1 }).eq('id', creatorId)
-      await supabase.from('users_profile').update({ experience: (userProfile.experience || 0) + 1, last_like_at: today, daily_like_count: currentLikeCount + 1 }).eq('id', userProfile.id)
-      setLikedIds([...likedIds, recruitId])
-      setUserProfile({ ...userProfile, experience: (userProfile.experience || 0) + 1, last_like_at: today, daily_like_count: currentLikeCount + 1 })
-      alert('点赞成功！双方各获得 1 经验！')
-      fetchRecruits() 
-    } catch (err: any) { alert('点赞失败'); }
+    const currentLikeCount = userProfile.last_like_at === today ? (userProfile.daily_like_count || 0) : 0
+
+    setLikedIds([...likedIds, recruitId])
+    setUserProfile({
+      ...userProfile,
+      experience: (userProfile.experience || 0) + 1,
+      last_like_at: today,
+      daily_like_count: currentLikeCount + 1,
+    })
+    fetchRecruits()
   }
 
-  // 🔥 这就是刚才加了监控器的函数
   async function onRecruitSubmit(data: any) {
-    console.log("👉 主页面收到了数据:", data) 
-    
     if (!userProfile) {
-      alert("错误：未获取到当前用户信息")
+      alert('错误：未获取到当前用户信息')
       return
     }
 
@@ -140,10 +144,8 @@ function GameDetailContent() {
     })
 
     if (error) {
-      console.error("❌ 数据库写入失败:", error)
-      alert("发布失败：" + error.message)
+      alert('发布失败：' + error.message)
     } else {
-      alert("✅ 发布成功！")
       setIsPostingRecruit(false)
       fetchRecruits()
     }
@@ -187,7 +189,7 @@ function GameDetailContent() {
     <div className="min-h-screen bg-[#050B14] text-gray-200 relative overflow-hidden pb-20">
       <div className="relative z-10">
         <Navbar />
-        
+
         <div className="h-64 w-full bg-[#0A111F] relative flex items-center justify-center overflow-hidden border-b border-cyan-500/30">
           {game.cover_url ? <img src={game.cover_url} className="absolute inset-0 w-full h-full object-cover opacity-30" /> : <div className="absolute inset-0 opacity-10 bg-[url('/logo.png')] bg-center bg-no-repeat bg-contain"></div>}
           <div className="absolute inset-0 bg-gradient-to-t from-[#050B14] via-transparent to-black/50"></div>
@@ -238,8 +240,8 @@ function GameDetailContent() {
                     {recruits.map((recruit, index) => {
                       const isFirstBlood = index === recruits.length - 1;
                       const isClosed = recruit.is_closed;
-                      const likeCount = recruit.likes?.length || 0; 
-                      const isRecruitFollowed = followedRecruitIds.includes(recruit.id); 
+                      const likeCount = recruit.likes?.length || 0;
+                      const isRecruitFollowed = followedRecruitIds.includes(recruit.id);
 
                       return (
                         <div key={recruit.id} className={`relative bg-[#0A111F]/90 backdrop-blur-md rounded-xl border border-cyan-900/50 overflow-hidden flex flex-col transition-all duration-300 ${isClosed ? 'opacity-60 grayscale-[0.5]' : 'hover:border-cyan-400 hover:shadow-[0_0_20px_rgba(6,182,212,0.2)]'}`}>
@@ -293,15 +295,15 @@ function GameDetailContent() {
                   <div className="space-y-4">
                     {posts.map(post => (
                       <div key={post.id} onClick={() => openPost(post)} className="bg-[#0A111F]/90 border border-gray-800 p-5 rounded-2xl hover:border-fuchsia-500/50 transition cursor-pointer flex gap-4">
-                         <img src={post.user?.avatar_url || '/logo.png'} className="w-10 h-10 rounded-full border border-gray-600 bg-black mt-1" />
-                         <div className="flex-1 min-w-0">
-                            <h3 className="text-lg font-bold text-white mb-2">{post.title}</h3>
-                            <p className="text-sm text-gray-400 line-clamp-2 mb-3">{post.content}</p>
-                            <div className="flex items-center gap-4 text-xs text-gray-500 font-mono">
-                              <UserName userId={post.user?.id} nickname={post.user?.nickname} />
-                              <FollowUserButton targetId={post.user?.id} currentUserId={userProfile?.id} />
-                            </div>
-                         </div>
+                        <img src={post.user?.avatar_url || '/logo.png'} className="w-10 h-10 rounded-full border border-gray-600 bg-black mt-1" />
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-lg font-bold text-white mb-2">{post.title}</h3>
+                          <p className="text-sm text-gray-400 line-clamp-2 mb-3">{post.content}</p>
+                          <div className="flex items-center gap-4 text-xs text-gray-500 font-mono">
+                            <UserName userId={post.user?.id} nickname={post.user?.nickname} />
+                            <FollowUserButton targetId={post.user?.id} currentUserId={userProfile?.id} />
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -312,29 +314,29 @@ function GameDetailContent() {
         </main>
       </div>
 
-      <ModalPostRecruit 
-        isOpen={isPostingRecruit} 
-        onClose={() => setIsPostingRecruit(false)} 
-        onSubmit={onRecruitSubmit} 
+      <ModalPostRecruit
+        isOpen={isPostingRecruit}
+        onClose={() => setIsPostingRecruit(false)}
+        onSubmit={onRecruitSubmit}
       />
-      <ModalPostForum 
-        isOpen={isPostingForum} 
-        onClose={() => setIsPostingForum(false)} 
-        onSubmit={onForumSubmit} 
+      <ModalPostForum
+        isOpen={isPostingForum}
+        onClose={() => setIsPostingForum(false)}
+        onSubmit={onForumSubmit}
       />
-      <ModalRecruitComments 
-        recruit={activeRecruit} 
-        comments={comments} 
-        loading={commentLoading} 
-        onClose={() => setActiveRecruit(null)} 
-        onSend={sendComment} 
+      <ModalRecruitComments
+        recruit={activeRecruit}
+        comments={comments}
+        loading={commentLoading}
+        onClose={() => setActiveRecruit(null)}
+        onSend={sendComment}
       />
-      <ModalForumDetail 
-        post={activePost} 
-        comments={postComments} 
-        loading={commentLoading} 
-        onClose={() => setActivePost(null)} 
-        onSend={sendPostComment} 
+      <ModalForumDetail
+        post={activePost}
+        comments={postComments}
+        loading={commentLoading}
+        onClose={() => setActivePost(null)}
+        onSend={sendPostComment}
       />
     </div>
   )

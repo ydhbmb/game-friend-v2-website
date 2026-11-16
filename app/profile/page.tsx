@@ -8,6 +8,18 @@ import { calculateLevel } from '@/lib/levels'
 import FollowUserButton from '@/components/FollowUserButton'
 import Link from 'next/link'
 
+function timeAgo(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime()
+  const m = Math.floor(diff / 60000)
+  if (m < 1) return '刚刚'
+  if (m < 60) return `${m} 分钟前`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h} 小时前`
+  const d = Math.floor(h / 24)
+  if (d < 30) return `${d} 天前`
+  return new Date(iso).toLocaleDateString('zh-CN')
+}
+
 function ProfileContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -17,15 +29,16 @@ function ProfileContent() {
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [recruits, setRecruits] = useState<any[]>([])
   const [myTeam, setMyTeam] = useState<any>(null)
-  const [steamGames, setSteamGames] = useState<any[]>([]) 
-  const [commonGames, setCommonGames] = useState<any[]>([]) 
-  const [followedGames, setFollowedGames] = useState<any[]>([]) 
-  
+  const [steamGames, setSteamGames] = useState<any[]>([])
+  const [commonGames, setCommonGames] = useState<any[]>([])
+  const [followedGames, setFollowedGames] = useState<any[]>([])
+  const [moments, setMoments] = useState<any[]>([])
+
   const [fansCount, setFansCount] = useState(0)
   const [followingCount, setFollowingCount] = useState(0)
-  
+
   const [loading, setLoading] = useState(true)
-  const [syncing, setSyncing] = useState(false) 
+  const [syncing, setSyncing] = useState(false)
 
   // 评价系统状态
   const [hasReviewed, setHasReviewed] = useState(false)
@@ -39,7 +52,7 @@ function ProfileContent() {
   useEffect(() => {
     async function init() {
       if (!targetId) return
-      
+
       let currentUserId = null
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
@@ -61,8 +74,9 @@ function ProfileContent() {
       const { data: rData } = await supabase.from('recruits').select(`*, games(name)`).eq('creator_id', targetId).order('created_at', { ascending: false }).limit(4)
       if (rData) setRecruits(rData)
 
-      const { data: teamData } = await supabase.from('team_members').select(`role, teams(*)`).eq('user_id', targetId).neq('role', 'pending').single()
-      if (teamData && teamData.teams) setMyTeam(teamData.teams)
+      // 战队：一人多队或零队都不再报错，取第一条
+      const { data: teamRows } = await supabase.from('team_members').select(`role, teams(*)`).eq('user_id', targetId).neq('role', 'pending').limit(1)
+      if (teamRows && teamRows.length > 0 && teamRows[0].teams) setMyTeam(teamRows[0].teams)
 
       const { data: gamesData } = await supabase.from('user_steam_games').select('*').eq('user_id', targetId).order('playtime_forever', { ascending: false }).limit(6)
       if (gamesData) setSteamGames(gamesData)
@@ -70,12 +84,21 @@ function ProfileContent() {
       const { data: fGameData } = await supabase.from('game_follows').select('game_id, games(*)').eq('user_id', targetId).order('created_at', { ascending: false }).limit(6)
       if (fGameData) setFollowedGames(fGameData.map(f => f.games).filter(Boolean))
 
+      // 该玩家最近 6 条动态
+      const { data: mData } = await supabase
+        .from('moments')
+        .select('id, content, created_at, moment_likes(user_id)')
+        .eq('user_id', targetId)
+        .order('created_at', { ascending: false })
+        .limit(6)
+      if (mData) setMoments(mData)
+
       if (currentUserId && currentUserId !== parseInt(targetId)) {
         const { data: cData } = await supabase.rpc('get_common_games', { user_a: currentUserId, user_b: parseInt(targetId) })
         if (cData) setCommonGames(cData)
 
-        // 查我是否评价过对方
-        const { data: revData } = await supabase.from('reviews').select('id').eq('reviewer_id', currentUserId).eq('target_id', targetId).single()
+        // 我是否评价过对方（maybeSingle 避免零行时报错）
+        const { data: revData } = await supabase.from('reviews').select('id').eq('reviewer_id', currentUserId).eq('target_id', targetId).maybeSingle()
         if (revData) setHasReviewed(true)
       }
 
@@ -112,28 +135,34 @@ function ProfileContent() {
     setSyncing(false)
   }
 
-  // 🔥 核心：提交评价
+  // 评价：走 RPC，计数由数据库原子累加
   async function handleReview(isPositive: boolean) {
     if (hasReviewed) return alert('你已经评价过该玩家啦！')
     setReviewMsg('提交中...')
-    
-    const { error } = await supabase.from('reviews').insert({
-      reviewer_id: currentUser.id,
-      target_id: profile.id,
-      is_positive: isPositive
+
+    const { error } = await supabase.rpc('give_review', {
+      p_target_id: profile.id,
+      p_is_positive: isPositive,
     })
 
-    if (!error) {
-      // 更新用户表的好评/差评数
-      const field = isPositive ? 'positive_reviews' : 'negative_reviews'
-      const currentCount = profile[field] || 0
-      await supabase.from('users_profile').update({ [field]: currentCount + 1 }).eq('id', profile.id)
-      
-      setProfile({ ...profile, [field]: currentCount + 1 })
-      setHasReviewed(true)
-      setReviewMsg(isPositive ? '已标记为靠谱搭子！' : '已记录反馈，感谢净化社区！')
+    if (error) {
+      setReviewMsg(error.message)
+      return
+    }
+
+    const field = isPositive ? 'positive_reviews' : 'negative_reviews'
+    setProfile({ ...profile, [field]: (profile[field] || 0) + 1 })
+    setHasReviewed(true)
+    setReviewMsg(isPositive ? '已标记为靠谱搭子！' : '已记录反馈，感谢净化社区！')
+  }
+
+  async function handleDeleteMoment(id: number) {
+    if (!confirm('确定删除这条动态吗？')) return
+    const { error } = await supabase.from('moments').delete().eq('id', id)
+    if (error) {
+      alert('删除失败：' + error.message)
     } else {
-      setReviewMsg('评价失败')
+      setMoments(prev => prev.filter(m => m.id !== id))
     }
   }
 
@@ -142,8 +171,7 @@ function ProfileContent() {
 
   const lvl = calculateLevel(profile.experience || 0, profile.id)
   const progressPercent = lvl.isMaxLevel ? 100 : Math.min(100, Math.floor((lvl.currentLevelExp / lvl.nextLevelExp) * 100))
-  
-  // 计算好评率
+
   const totalReviews = (profile.positive_reviews || 0) + (profile.negative_reviews || 0)
   const goodRate = totalReviews === 0 ? '暂无' : Math.round(((profile.positive_reviews || 0) / totalReviews) * 100) + '%'
 
@@ -158,7 +186,7 @@ function ProfileContent() {
         <Navbar />
 
         <main className="max-w-4xl mx-auto px-4 md:px-6 pt-10">
-          
+
           <div className="bg-[#0A111F]/90 backdrop-blur-xl border border-cyan-500/30 rounded-3xl p-6 md:p-8 flex flex-col md:flex-row items-center md:items-start gap-8 shadow-[0_0_40px_rgba(6,182,212,0.15)] relative overflow-hidden">
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-400 to-fuchsia-500"></div>
 
@@ -166,7 +194,7 @@ function ProfileContent() {
               <img src={profile.avatar_url || '/logo.png'} className="w-32 h-32 md:w-40 md:h-40 rounded-full border-4 border-cyan-500/50 object-cover shadow-[0_0_30px_rgba(6,182,212,0.3)] bg-black" />
               {profile.id === 1 && <span className="absolute -top-4 -left-4 text-4xl drop-shadow-lg">👑</span>}
             </div>
-            
+
             <div className="flex-1 text-center md:text-left flex flex-col justify-center h-full">
               <div className="flex flex-col md:flex-row items-center gap-3 mb-2">
                 <h1 className="text-3xl md:text-4xl font-black text-white font-orbitron">{profile.nickname}</h1>
@@ -176,9 +204,9 @@ function ProfileContent() {
                   </span>
                 )}
               </div>
-              
+
               <p className="text-sm text-cyan-500 font-mono mb-4">ID: {profile.id} · {profile.gender || '保密'}</p>
-              
+
               <div className="flex items-center justify-center md:justify-start gap-6 mb-6">
                 <div className="text-center"><span className="block text-xl font-bold text-white">{fansCount}</span><span className="text-xs text-gray-500">粉丝</span></div>
                 <div className="text-center"><span className="block text-xl font-bold text-white">{followingCount}</span><span className="text-xs text-gray-500">关注</span></div>
@@ -190,9 +218,9 @@ function ProfileContent() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
-            
+
             <div className="space-y-6">
-              
+
               {/* 信誉分面板 */}
               <div className="bg-[#0A111F]/80 border border-green-500/30 rounded-2xl p-5">
                 <h3 className="text-sm font-bold text-green-400 mb-4 font-orbitron flex items-center gap-2">🛡️ 信誉档案</h3>
@@ -206,8 +234,7 @@ function ProfileContent() {
                   <span className="text-green-400">👍 靠谱: {profile.positive_reviews || 0}</span>
                   <span className="text-red-400">🕊️ 鸽子: {profile.negative_reviews || 0}</span>
                 </div>
-                
-                {/* 评价按钮（如果不是自己） */}
+
                 {!isSelf && (
                   <div className="pt-3 border-t border-gray-700/50">
                     {hasReviewed ? (
@@ -237,14 +264,14 @@ function ProfileContent() {
               <div className="bg-[#0A111F]/80 border border-blue-500/30 rounded-2xl p-5 relative overflow-hidden">
                 <div className="absolute -right-4 -bottom-4 text-6xl opacity-10">🎮</div>
                 <h3 className="text-sm font-bold text-blue-400 mb-4 font-orbitron flex items-center gap-2">🕹️ Steam 档案</h3>
-                
+
                 {profile.steam_id ? (
                   <div>
                     <p className="text-xs text-gray-400 mb-3 truncate">已绑定 ID: <span className="text-white">{profile.steam_id}</span></p>
                     <a href={`https://steamcommunity.com/profiles/${profile.steam_id}`} target="_blank" rel="noopener noreferrer" className="block text-center bg-blue-600/20 hover:bg-blue-600 text-blue-400 hover:text-white border border-blue-500/50 py-2 rounded-xl text-sm font-bold transition-all mb-2">
                       查看 Steam 主页 →
                     </a>
-                    
+
                     {isSelf && (
                       <div className="space-y-2 mt-4">
                         <button onClick={handleSyncSteam} disabled={syncing} className="w-full bg-fuchsia-600 text-white py-2 rounded-xl text-sm font-bold shadow-lg hover:bg-fuchsia-500 disabled:opacity-50 transition">
@@ -256,12 +283,12 @@ function ProfileContent() {
 
                     {steamGames.length > 0 && (
                       <div className="mt-6 border-t border-gray-700/50 pt-4">
-                         <p className="text-[10px] text-gray-500 mb-3">最常玩的游戏：</p>
-                         <div className="flex flex-wrap gap-2">
-                           {steamGames.map((g, idx) => (
-                             <div key={idx} className="bg-black border border-gray-700 text-gray-300 text-[10px] px-2 py-1 rounded truncate max-w-full">{g.game_name}</div>
-                           ))}
-                         </div>
+                        <p className="text-[10px] text-gray-500 mb-3">最常玩的游戏：</p>
+                        <div className="flex flex-wrap gap-2">
+                          {steamGames.map((g, idx) => (
+                            <div key={idx} className="bg-black border border-gray-700 text-gray-300 text-[10px] px-2 py-1 rounded truncate max-w-full">{g.game_name}</div>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -301,27 +328,77 @@ function ProfileContent() {
             <div className="md:col-span-2 space-y-6">
               {!isSelf && profile.steam_id && (
                 <div className="bg-gradient-to-br from-blue-900/40 to-cyan-900/20 border border-blue-500/50 rounded-2xl p-5 shadow-[0_0_20px_rgba(37,99,235,0.2)]">
-                   <div className="flex items-center justify-between mb-4">
-                     <h3 className="text-lg font-black text-white font-orbitron">🎯 雷达匹配结果</h3>
-                     <span className="bg-blue-600 text-white text-xs font-bold px-3 py-1 rounded-full">拥有 {commonGames.length} 款共同游戏</span>
-                   </div>
-                   {commonGames.length > 0 ? (
-                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                       {commonGames.slice(0, 9).map((g: any, idx) => (
-                         <div key={idx} className="bg-black/50 border border-blue-500/30 text-blue-300 text-xs px-3 py-2 rounded-lg truncate">{g.game_name}</div>
-                       ))}
-                     </div>
-                   ) : <p className="text-sm text-gray-400">暂时没有共同游戏。</p>}
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-black text-white font-orbitron">🎯 雷达匹配结果</h3>
+                    <span className="bg-blue-600 text-white text-xs font-bold px-3 py-1 rounded-full">拥有 {commonGames.length} 款共同游戏</span>
+                  </div>
+                  {commonGames.length > 0 ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {commonGames.slice(0, 9).map((g: any, idx) => (
+                        <div key={idx} className="bg-black/50 border border-blue-500/30 text-blue-300 text-xs px-3 py-2 rounded-lg truncate">{g.game_name}</div>
+                      ))}
+                    </div>
+                  ) : <p className="text-sm text-gray-400">暂时没有共同游戏。</p>}
                 </div>
               )}
+
+              {/* 动态卡片 */}
+              <div className="bg-[#0A111F]/80 border border-fuchsia-500/30 rounded-2xl p-5">
+                <div className="flex items-center justify-between mb-5">
+                  <h3 className="text-lg font-black text-white font-orbitron flex items-center gap-2">
+                    <span className="w-2 h-5 bg-fuchsia-400 rounded-full"></span> 动态广场
+                  </h3>
+                  <Link href="/moments" className="text-xs text-fuchsia-400 hover:text-fuchsia-300 font-bold transition">
+                    去广场 →
+                  </Link>
+                </div>
+
+                {moments.length > 0 ? (
+                  <div className="space-y-3">
+                    {moments.map(m => {
+                      const likeCount = m.moment_likes?.length || 0
+                      return (
+                        <div key={m.id} className="bg-[#050B14] border border-gray-700/70 rounded-xl p-4 hover:border-fuchsia-500/40 transition group">
+                          <p className="text-[15px] text-gray-200 whitespace-pre-wrap break-words leading-relaxed">
+                            {m.content}
+                          </p>
+                          <div className="flex items-center gap-4 mt-3 text-[11px] text-gray-500 font-mono">
+                            <span>{timeAgo(m.created_at)}</span>
+                            <span className="text-red-400/80">❤️ {likeCount}</span>
+                            {isSelf && (
+                              <button
+                                onClick={() => handleDeleteMoment(m.id)}
+                                className="ml-auto text-gray-600 hover:text-red-400 transition"
+                              >
+                                删除
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 border border-dashed border-gray-700 rounded-xl">
+                    <p className="text-xs text-gray-500">
+                      {isSelf ? '你还没有发过动态，去广场说两句吧。' : '该玩家还没有发过动态。'}
+                    </p>
+                    {isSelf && (
+                      <Link href="/moments" className="inline-block mt-3 text-xs text-fuchsia-400 hover:underline">
+                        去发第一条 →
+                      </Link>
+                    )}
+                  </div>
+                )}
+              </div>
 
               <div className="bg-[#0A111F]/80 border border-gray-800 rounded-2xl p-5">
                 <h3 className="text-lg font-black text-white mb-6 font-orbitron flex items-center gap-2"><span className="w-2 h-5 bg-cyan-400 rounded-full"></span> 历史招募通缉</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {recruits.map(r => (
                     <div key={r.id} onClick={() => router.push(`/game?id=${r.game_id}`)} className="bg-[#050B14] border border-gray-700 p-4 rounded-xl hover:border-cyan-500/50 transition cursor-pointer group">
-                       <p className="text-[10px] text-cyan-500 mb-2 truncate">游戏: {r.games?.name}</p>
-                       <p className="font-bold text-white mb-3 line-clamp-1 group-hover:text-cyan-400 transition">{r.play_content}</p>
+                      <p className="text-[10px] text-cyan-500 mb-2 truncate">游戏: {r.games?.name}</p>
+                      <p className="font-bold text-white mb-3 line-clamp-1 group-hover:text-cyan-400 transition">{r.play_content}</p>
                     </div>
                   ))}
                   {recruits.length === 0 && <p className="text-gray-500 text-sm">暂无招募。</p>}

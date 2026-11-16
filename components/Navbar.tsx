@@ -84,6 +84,7 @@ export default function Navbar() {
   if (pathname === '/login' || pathname === '/register') return null
 
   const levelInfo = userProfile ? calculateLevel(userProfile.experience || 0, userProfile.id) : null
+  const isAdmin = !!userProfile && (userProfile.role === 'admin' || userProfile.role === 'super_admin')
 
   return (
     <nav className="bg-[#050B14]/80 backdrop-blur-md border-b border-cyan-900/50 px-4 md:px-6 py-3 flex items-center justify-between sticky top-0 z-50">
@@ -106,7 +107,7 @@ export default function Navbar() {
         ) : userProfile && levelInfo ? (
           <div className="flex items-center gap-1 md:gap-3 relative">
 
-            {/* 🔥 新增：动态广场入口 */}
+            {/* 动态广场 */}
             <Link
               href="/moments"
               className={`text-xs font-bold px-2 py-1.5 rounded-lg border transition ${
@@ -117,6 +118,20 @@ export default function Navbar() {
             >
               <span className="hidden md:inline">广场</span><span className="md:hidden">🌐</span>
             </Link>
+
+            {/* 管理员专属快捷入口 */}
+            {isAdmin && (
+              <Link
+                href="/admin"
+                className={`text-xs font-bold px-2 py-1.5 rounded-lg border transition ${
+                  pathname === '/admin'
+                    ? 'bg-red-600 text-white border-red-500'
+                    : 'text-red-400 border-red-500/30 hover:bg-red-500/20'
+                }`}
+              >
+                <span className="hidden md:inline">后台</span><span className="md:hidden">🛡️</span>
+              </Link>
+            )}
 
             <button 
               onClick={() => window.dispatchEvent(new Event('openChatWidget'))}
@@ -139,7 +154,7 @@ export default function Navbar() {
               <div className="flex items-center gap-2 cursor-pointer select-none" onClick={() => setIsMenuOpen(!isMenuOpen)}>
                 <img src={userProfile.avatar_url || '/logo.png'} className="w-8 h-8 rounded-full object-cover border border-cyan-500 shadow-[0_0_10px_rgba(6,182,212,0.5)]" />
                 <div className="hidden lg:flex flex-col">
-                  {/* 🔥 称号展示 */}
+                  {/* 称号展示 */}
                   {userProfile.equipped_title && (
                     <span className="text-[10px] font-black text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-400 to-cyan-400 border border-fuchsia-500/30 px-1.5 rounded w-max shadow-[0_0_8px_rgba(217,70,239,0.3)]">
                       {userProfile.equipped_title}
@@ -154,15 +169,17 @@ export default function Navbar() {
               </div>
               
               {isMenuOpen && (
-                <div className="absolute top-full right-0 mt-2 w-36 bg-[#0A111F] border border-cyan-500/30 rounded-xl shadow-xl py-2">
+                <div className="absolute top-full right-0 mt-2 w-40 bg-[#0A111F] border border-cyan-500/30 rounded-xl shadow-xl py-2">
                   <div className="lg:hidden px-4 py-2 border-b border-gray-700 mb-1">
                     {userProfile.equipped_title && <p className="text-[10px] text-fuchsia-400 font-bold mb-1">{userProfile.equipped_title}</p>}
                     <p className="text-xs text-white font-bold">{userProfile.nickname}</p>
                     <p className="text-[10px] text-cyan-400">Lv.{levelInfo.level} {levelInfo.name}</p>
                   </div>
                   <Link href="/gacha" onClick={() => setIsMenuOpen(false)} className="block px-4 py-2 text-sm text-yellow-400 font-bold hover:bg-yellow-500/20">🎰 僚机盲盒</Link>
-                  {/* 🔥 新增：下拉里的广场入口 */}
                   <Link href="/moments" onClick={() => setIsMenuOpen(false)} className="block px-4 py-2 text-sm text-fuchsia-400 font-bold hover:bg-fuchsia-500/20">🌐 动态广场</Link>
+                  {isAdmin && (
+                    <Link href="/admin" onClick={() => setIsMenuOpen(false)} className="block px-4 py-2 text-sm text-red-400 font-bold hover:bg-red-500/20">🛡️ 神权控制台</Link>
+                  )}
                   <Link href={`/profile?id=${userProfile.id}`} onClick={() => setIsMenuOpen(false)} className="block px-4 py-2 text-sm text-gray-300 hover:bg-cyan-500/20">个人主页</Link>
                   <Link href="/following" onClick={() => setIsMenuOpen(false)} className="block px-4 py-2 text-sm text-gray-300 hover:bg-cyan-500/20">我的关注</Link>
                   <Link href="/user-center" onClick={() => setIsMenuOpen(false)} className="block px-4 py-2 text-sm text-gray-300 hover:bg-cyan-500/20">用户中心</Link>
