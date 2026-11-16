@@ -105,7 +105,19 @@ export default function Navbar() {
           <span className="text-cyan-500 text-xs animate-pulse">加载中...</span>
         ) : userProfile && levelInfo ? (
           <div className="flex items-center gap-1 md:gap-3 relative">
-            
+
+            {/* 🔥 新增：动态广场入口 */}
+            <Link
+              href="/moments"
+              className={`text-xs font-bold px-2 py-1.5 rounded-lg border transition ${
+                pathname === '/moments'
+                  ? 'bg-fuchsia-600 text-white border-fuchsia-500'
+                  : 'text-fuchsia-400 border-fuchsia-500/30 hover:bg-fuchsia-500/20'
+              }`}
+            >
+              <span className="hidden md:inline">广场</span><span className="md:hidden">🌐</span>
+            </Link>
+
             <button 
               onClick={() => window.dispatchEvent(new Event('openChatWidget'))}
               className="relative text-xs font-bold px-2 py-1.5 rounded-lg text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/20"
@@ -149,6 +161,8 @@ export default function Navbar() {
                     <p className="text-[10px] text-cyan-400">Lv.{levelInfo.level} {levelInfo.name}</p>
                   </div>
                   <Link href="/gacha" onClick={() => setIsMenuOpen(false)} className="block px-4 py-2 text-sm text-yellow-400 font-bold hover:bg-yellow-500/20">🎰 僚机盲盒</Link>
+                  {/* 🔥 新增：下拉里的广场入口 */}
+                  <Link href="/moments" onClick={() => setIsMenuOpen(false)} className="block px-4 py-2 text-sm text-fuchsia-400 font-bold hover:bg-fuchsia-500/20">🌐 动态广场</Link>
                   <Link href={`/profile?id=${userProfile.id}`} onClick={() => setIsMenuOpen(false)} className="block px-4 py-2 text-sm text-gray-300 hover:bg-cyan-500/20">个人主页</Link>
                   <Link href="/following" onClick={() => setIsMenuOpen(false)} className="block px-4 py-2 text-sm text-gray-300 hover:bg-cyan-500/20">我的关注</Link>
                   <Link href="/user-center" onClick={() => setIsMenuOpen(false)} className="block px-4 py-2 text-sm text-gray-300 hover:bg-cyan-500/20">用户中心</Link>
