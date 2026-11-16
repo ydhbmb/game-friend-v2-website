@@ -1,0 +1,60 @@
+'use client'
+
+import { useState } from 'react'
+
+interface Props {
+  post: any
+  comments: any[]
+  loading: boolean
+  onClose: () => void
+  onSend: (content: string) => void
+}
+
+export default function ModalForumDetail({ post, comments, loading, onClose, onSend }: Props) {
+  const [newComment, setNewComment] = useState('')
+  if (!post) return null
+
+  const handleSend = () => {
+    if (!newComment.trim()) return
+    onSend(newComment)
+    setNewComment('')
+  }
+
+  return (
+    <div className="fixed inset-0 bg-[#050B14]/90 backdrop-blur-md flex items-center justify-center z-50 p-4">
+      <div className="bg-[#0A111F] border border-fuchsia-500/50 rounded-2xl w-full max-w-2xl shadow-[0_0_30px_rgba(217,70,239,0.2)] flex flex-col h-[85vh] max-h-[700px] overflow-hidden">
+        <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-black/40">
+          <h3 className="font-bold text-white text-lg truncate pr-4">{post.title}</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-red-500 text-2xl leading-none">&times;</button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          <div className="flex gap-4">
+            <img src={post.user?.avatar_url || '/logo.png'} className="w-10 h-10 rounded-full border border-gray-600 bg-black" />
+            <div>
+              <p className="text-sm font-bold text-fuchsia-400 mb-1">{post.user?.nickname}</p>
+              <p className="text-gray-200 whitespace-pre-wrap leading-relaxed">{post.content}</p>
+            </div>
+          </div>
+          <div className="border-t border-gray-800 pt-6">
+            <h4 className="text-sm text-gray-400 mb-4">全部回复 ({comments.length})</h4>
+            <div className="space-y-4">
+              {loading ? <p className="text-center text-gray-500 text-sm">加载中...</p> : comments.map(c => (
+                <div key={c.id} className="flex gap-3">
+                  <img src={c.user?.avatar_url || '/logo.png'} className="w-8 h-8 rounded border border-gray-600 object-cover bg-black mt-1" />
+                  <div>
+                    <p className="text-xs text-fuchsia-400 mb-1">{c.user?.nickname}</p>
+                    <div className="bg-gray-800 border border-gray-700 rounded-xl rounded-tl-sm px-4 py-2 text-sm text-gray-200 shadow-sm">{c.content}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="p-4 border-t border-gray-800 bg-black/40 flex gap-2">
+          <input className="flex-1 bg-[#050B14] border border-gray-700 rounded-lg px-4 py-2 outline-none text-sm text-white focus:border-fuchsia-500" placeholder="回复帖子..." value={newComment} onChange={(e) => setNewComment(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend()} />
+          <button onClick={handleSend} className="bg-fuchsia-600 text-white px-6 py-2 rounded-lg font-bold text-sm hover:bg-fuchsia-500 shadow-[0_0_10px_rgba(217,70,239,0.4)]">发送</button>
+        </div>
+      </div>
+    </div>
+  )
+}

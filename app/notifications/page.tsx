@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import Navbar from '@/components/Navbar'
 import Link from 'next/link'
+import UserName from '@/components/UserName'
 
 export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<any[]>([])
@@ -27,10 +28,14 @@ export default function NotificationsPage() {
         if (data) {
           setNotifications(data)
           
-          // 🔥 核心：将我的所有未读通知标记为已读
-          const unreadIds = data.filter(n => !n.is_read).map(n => n.id)
-          if (unreadIds.length > 0) {
-            await supabase.from('notifications').update({ is_read: true }).in('id', unreadIds)
+          if (data.length > 0) {
+            const { error } = await supabase
+              .from('notifications')
+              .update({ is_read: true })
+              .eq('user_id', profile.id)
+              .eq('is_read', false)
+            
+            if (error) console.error("标记通知已读失败:", error)
           }
         }
       } catch (err) {
@@ -64,7 +69,7 @@ export default function NotificationsPage() {
                   <img src={n.actor?.avatar_url || '/logo.png'} className="w-12 h-12 rounded-full object-cover bg-gray-800 border border-gray-700 mt-1" />
                   <div>
                     <p className="text-[15px] leading-relaxed">
-                      <span className="font-bold text-white mr-2">{n.actor?.nickname}</span>
+                      <UserName userId={n.actor?.id} nickname={n.actor?.nickname} className="font-bold text-white mr-2" />
                       {n.type === 'follow' && <span className="text-gray-300">关注了你</span>}
                       {n.type === 'comment' && (
                         <span className="text-gray-300">评论了你的招募：<span className="text-cyan-400">"{n.content}"</span></span>
