@@ -7,7 +7,6 @@ import Navbar from '@/components/Navbar'
 import FollowUserButton from '@/components/FollowUserButton'
 import UserName from '@/components/UserName'
 
-// 引入拆分出的弹窗组件
 import ModalPostRecruit from '@/components/ModalPostRecruit'
 import ModalPostForum from '@/components/ModalPostForum'
 import ModalRecruitComments from '@/components/ModalRecruitComments'
@@ -30,7 +29,6 @@ function GameDetailContent() {
   
   const [activeTab, setActiveTab] = useState<'recruit' | 'forum'>('recruit')
 
-  // 弹窗控制状态
   const [isPostingRecruit, setIsPostingRecruit] = useState(false)
   const [isPostingForum, setIsPostingForum] = useState(false)
   const [activeRecruit, setActiveRecruit] = useState<any>(null)
@@ -107,16 +105,48 @@ function GameDetailContent() {
     if (!userProfile) return alert('请先登录！')
     if (likedIds.includes(recruitId)) return alert('你已经赞过这条通缉令啦！')
     if (creatorId === userProfile.id) return alert('不能给自己点赞哦！')
-    await supabase.from('likes').insert({ user_id: userProfile.id, recruit_id: recruitId })
-    const { data: creatorData } = await supabase.from('users_profile').select('experience').eq('id', creatorId).single()
-    if (creatorData) await supabase.from('users_profile').update({ experience: (creatorData.experience || 0) + 1 }).eq('id', creatorId)
-    setLikedIds([...likedIds, recruitId])
-    fetchRecruits() 
+    const today = new Date().toISOString().split('T')[0]
+    let currentLikeCount = userProfile.last_like_at === today ? (userProfile.daily_like_count || 0) : 0
+    if (currentLikeCount >= 5) return alert('你今天已经点赞 5 次啦，明天再来吧！')
+    try {
+      await supabase.from('likes').insert({ user_id: userProfile.id, recruit_id: recruitId })
+      const { data: creatorData } = await supabase.from('users_profile').select('experience').eq('id', creatorId).single()
+      if (creatorData) await supabase.from('users_profile').update({ experience: (creatorData.experience || 0) + 1 }).eq('id', creatorId)
+      await supabase.from('users_profile').update({ experience: (userProfile.experience || 0) + 1, last_like_at: today, daily_like_count: currentLikeCount + 1 }).eq('id', userProfile.id)
+      setLikedIds([...likedIds, recruitId])
+      setUserProfile({ ...userProfile, experience: (userProfile.experience || 0) + 1, last_like_at: today, daily_like_count: currentLikeCount + 1 })
+      alert('点赞成功！双方各获得 1 经验！')
+      fetchRecruits() 
+    } catch (err: any) { alert('点赞失败'); }
   }
 
+  // 🔥 这就是刚才加了监控器的函数
   async function onRecruitSubmit(data: any) {
-    const { error } = await supabase.from('recruits').insert({ game_id: gameId, creator_id: userProfile.id, ...data })
-    if (!error) { setIsPostingRecruit(false); fetchRecruits() }
+    console.log("👉 主页面收到了数据:", data) 
+    
+    if (!userProfile) {
+      alert("错误：未获取到当前用户信息")
+      return
+    }
+
+    const { error } = await supabase.from('recruits').insert({
+      game_id: gameId,
+      creator_id: userProfile.id,
+      play_content: data.playContent,
+      online_time: data.onlineTime,
+      personality: data.personality,
+      platform: data.platform,
+      server_region: data.serverRegion
+    })
+
+    if (error) {
+      console.error("❌ 数据库写入失败:", error)
+      alert("发布失败：" + error.message)
+    } else {
+      alert("✅ 发布成功！")
+      setIsPostingRecruit(false)
+      fetchRecruits()
+    }
   }
 
   async function onForumSubmit(data: any) {
