@@ -1,508 +1,341 @@
-'use client';
+'use client'
 
-/**
- * app/page.tsx —— 可直接整文件替换
- * ------------------------------------------------------------
- * 与你的原版逻辑完全一致（同一套 supabase 查询、同一个新建弹窗、
- * 同样的加载骨架 / 空状态），唯一改动：
- *
- *   原来的  <img src="/banner.png" alt="Wingman Radar" className="w-full max-w-2xl ..." />
- *   换成    <HeroRadar />
- *
- * 如果下面这 3 行 import 的路径和你项目不一致，保留你原来的那 3 行即可：
- *   import { supabase } from '@/lib/supabase';
- *   import Header from '@/components/Header';
- *   import CreateGameModal from '@/components/CreateGameModal';
- * （其余 4 个小组件我已经内联进本文件，不再需要 import）
- */
+import { useState, useEffect, useRef } from 'react'
+import { supabase } from '@/lib/supabase'
+import Link from 'next/link'
+import Navbar from '@/components/Navbar'
+import HeroRadar from '@/components/HeroRadar'
+import { calculateLevel } from '@/lib/levels'
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { supabase } from '@/lib/supabase';
-import Header from '@/components/Header';
-import CreateGameModal from '@/components/CreateGameModal';
-import HeroRadar from '@/components/HeroRadar';
-
-/* ── 类型 ───────────────────────────────────────────────── */
-type Profile = {
-  id: number;
-  auth_id: string;
-  nickname: string;
-  avatar_url: string | null;
-  experience: number;
-};
-
-type Game = {
-  id: number;
-  name: string;
-  cover_url: string | null;
-  parent_id: number | null;
-  created_at: string;
-  creator?: { nickname: string } | null;
-};
-
-type RankRow = {
-  id: number;
-  nickname: string;
-  avatar_url: string | null;
-  experience: number;
-};
-
-/* ── 等级换算（与你 lib 里的 p(experience, id) 行为一致） ── */
-function levelOf(experience: number, _id?: number) {
-  const lv = Math.floor(Math.sqrt(Math.max(experience, 0) / 100)) + 1;
-  const names = [
-    '初出茅庐',
-    '略有小成',
-    '登堂入室',
-    '渐入佳境',
-    '炉火纯青',
-    '出神入化',
-    '知名豆豆',
-    '人气豆豆',
-    '传奇豆豆',
-    '荣耀豆豆',
-  ];
-  return { level: lv, name: names[Math.min(lv - 1, names.length - 1)] };
-}
-
-/* ── 内联小组件：SectionHeader（原 components/SectionHeader） ── */
-function SectionHeader({
-  children,
-  count,
-  action,
-  className = '',
-}: {
-  children: React.ReactNode;
-  count?: number | string;
-  action?: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={`flex items-baseline justify-between gap-3 mb-3 ${className}`}>
-      <h2 className="flex items-center gap-2 text-[15px] font-semibold text-[#E8EFF7]">
-        <span className="w-[3px] h-[14px] rounded-full bg-cyan-400/80" />
-        {children}
-      </h2>
-      <div className="flex items-center gap-2 shrink-0">
-        {count !== undefined && (
-          <span className="text-[11px] text-[#5C6B7F] tabular-nums">{count}</span>
-        )}
-        {action}
-      </div>
-    </div>
-  );
-}
-
-/* ── 内联小组件：EmptyState（原 components/EmptyState） ── */
-function EmptyState({
-  title,
-  description,
-  action,
-  compact = false,
-}: {
-  title: string;
-  description?: string;
-  action?: React.ReactNode;
-  compact?: boolean;
-}) {
-  return (
-    <div
-      className={`rounded-xl border border-dashed border-white/[0.08] text-center ${
-        compact ? 'py-8' : 'py-16'
-      }`}
-    >
-      <p className="text-[13px] text-[#5C6B7F]">{title}</p>
-      {description && <p className="text-[11.5px] text-[#4A5768] mt-1.5">{description}</p>}
-      {action && <div className="mt-4">{action}</div>}
-    </div>
-  );
-}
-
-/* ── 内联小组件：Button（原 components/ui/Button） ── */
-function Button({
-  children,
-  onClick,
-  variant = 'primary',
-  size = 'md',
-  disabled = false,
-  loading = false,
-  full = false,
-  type = 'button',
-  title,
-  className = '',
-}: {
-  children: React.ReactNode;
-  onClick?: () => void;
-  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
-  size?: 'sm' | 'md';
-  disabled?: boolean;
-  loading?: boolean;
-  full?: boolean;
-  type?: 'button' | 'submit';
-  title?: string;
-  className?: string;
-}) {
-  const sizeCls = { sm: 'h-8 px-3 text-[12px]', md: 'h-10 px-4 text-[13px]' };
-  const variantCls = {
-    primary: 'bg-cyan-600 text-white hover:bg-cyan-500',
-    secondary:
-      'bg-white/[0.05] text-[#E8EFF7] border border-white/[0.1] hover:bg-white/[0.09]',
-    ghost: 'bg-transparent text-[#94A3B8] hover:bg-white/[0.05] hover:text-[#E8EFF7]',
-    danger:
-      'bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20',
-  };
-  return (
-    <button
-      type={type}
-      onClick={onClick}
-      disabled={disabled || loading}
-      title={title}
-      className={[
-        'inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap',
-        sizeCls[size],
-        variantCls[variant],
-        full ? 'w-full' : '',
-        className,
-      ].join(' ')}
-    >
-      {loading ? '处理中…' : children}
-    </button>
-  );
-}
-
-/* ── 内联小组件：UserLink（原 components/UserLink） ── */
-function UserLink({
-  userId,
-  nickname,
-  className = '',
-  showLink = true,
-}: {
-  userId: number;
-  nickname: string;
-  className?: string;
-  showLink?: boolean;
-}) {
-  if (!showLink) return <span className={className}>{nickname}</span>;
-  return (
-    <Link
-      href={`/profile?id=${userId}`}
-      className={`hover:text-cyan-400 hover:underline transition-all cursor-pointer ${className}`}
-      onClick={(e) => e.stopPropagation()}
-    >
-      {nickname}
-    </Link>
-  );
-}
-
-/* ── 荣耀排行侧栏 ───────────────────────────────────────── */
-function Leaderboard({
-  leaderboard,
-  loading = false,
-}: {
-  leaderboard: RankRow[];
-  loading?: boolean;
-}) {
-  return (
-    <aside className="w-full lg:w-[268px] xl:w-[288px] shrink-0">
-      <div className="rounded-xl border border-white/[0.06] bg-[#0A111F]/70 lg:sticky lg:top-24 overflow-hidden">
-        <div className="flex items-baseline justify-between px-3.5 pt-3.5 pb-2.5 border-b border-white/[0.06]">
-          <h2 className="text-[13px] font-semibold text-[#E8EFF7]">荣耀排行</h2>
-          <span className="text-[10.5px] text-[#5C6B7F] tabular-nums">
-            {loading ? '同步中' : `TOP ${leaderboard.length}`}
-          </span>
-        </div>
-        <div className="p-1.5">
-          {loading ? (
-            <div className="space-y-1">
-              {[0, 1, 2, 3, 4].map((i) => (
-                <div key={i} className="flex items-center gap-2.5 px-2.5 h-[46px]">
-                  <div className="w-3 h-2 rounded bg-white/[0.05]" />
-                  <div className="w-7 h-7 rounded-full bg-white/[0.05]" />
-                  <div className="flex-1 space-y-1.5">
-                    <div className="h-2.5 w-20 rounded bg-white/[0.05]" />
-                    <div className="h-2 w-12 rounded bg-white/[0.04]" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : leaderboard.length === 0 ? (
-            <p className="text-center text-[11.5px] text-[#4A5768] py-8">暂无排行数据</p>
-          ) : (
-            leaderboard.map((item, index) => {
-              const lv = levelOf(item.experience, item.id);
-              return (
-                <div
-                  key={item.id}
-                  className="flex items-center gap-2.5 px-2.5 h-[46px] rounded-lg hover:bg-white/[0.05] transition-colors"
-                >
-                  <span
-                    className={`w-3.5 text-center text-[11px] font-mono tabular-nums shrink-0 ${
-                      index < 3 ? 'text-cyan-400' : 'text-[#4A5768]'
-                    }`}
-                  >
-                    {index + 1}
-                  </span>
-                  <div className="relative shrink-0">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={item.avatar_url || '/logo.png'}
-                      alt={item.nickname}
-                      className="w-7 h-7 rounded-full object-cover bg-black"
-                    />
-                    {item.id === 1 && (
-                      <span className="absolute -top-1.5 -right-1.5 text-[10px] leading-none">
-                        👑
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <UserLink
-                      userId={item.id}
-                      nickname={item.nickname}
-                      className="text-[12.5px] font-medium text-[#E8EFF7] truncate block leading-tight"
-                    />
-                    <p className="text-[10px] text-[#5C6B7F] truncate leading-tight mt-0.5">
-                      Lv.{lv.level} · {lv.name}
-                    </p>
-                  </div>
-                  <span className="text-[11px] text-[#94A3B8] font-mono tabular-nums shrink-0">
-                    {item.experience}
-                  </span>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
-    </aside>
-  );
-}
-
-/* ── 搜索 + 新建节点 工具条 ─────────────────────────────── */
-function HallToolbar({
-  search,
-  setSearch,
-  onSearch,
-  loading,
-  onCreateClick,
-}: {
-  search: string;
-  setSearch: (v: string) => void;
-  onSearch: () => void;
-  loading: boolean;
-  onCreateClick: () => void;
-}) {
-  return (
-    <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-4">
-      <div className="flex items-center flex-1 min-w-0 h-10 rounded-lg bg-white/[0.03] border border-white/[0.08] focus-within:border-cyan-500/50 transition-colors px-3">
-        <span className="text-[#5C6B7F] text-[11px] mr-2.5 shrink-0">搜索</span>
-        <input
-          className="flex-1 min-w-0 bg-transparent outline-none text-[13px] text-[#E8EFF7] placeholder-[#4A5768]"
-          placeholder="输入游戏名称…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') onSearch();
-          }}
-        />
-        {search && (
-          <button
-            onClick={() => {
-              setSearch('');
-              onSearch();
-            }}
-            className="text-[#4A5768] hover:text-[#94A3B8] text-[11px] px-1 shrink-0 transition-colors"
-            aria-label="清除搜索"
-          >
-            清除
-          </button>
-        )}
-      </div>
-      <div className="flex gap-2 shrink-0">
-        <Button variant="secondary" onClick={onSearch} disabled={loading}>
-          检索
-        </Button>
-        <Button variant="primary" onClick={onCreateClick}>
-          新建节点
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-/* ══════════════ 页面 ─═════════════ */
 export default function HomePage() {
-  const [user, setUser] = useState<Profile | null>(null);
-  const [games, setGames] = useState<Game[]>([]);
-  const [leaderboard, setLeaderboard] = useState<RankRow[]>([]);
-  const [search, setSearch] = useState('');
-  const [appliedSearch, setAppliedSearch] = useState('');
-  const [rankLoading, setRankLoading] = useState(true);
-  const [gamesLoading, setGamesLoading] = useState(true);
-  const [createOpen, setCreateOpen] = useState(false);
+  const [userProfile, setUserProfile] = useState<any>(null)
+  const [games, setGames] = useState<any[]>([])
+  const [leaderboard, setLeaderboard] = useState<any[]>([]) 
+  const [followedGameIds, setFollowedGameIds] = useState<number[]>([]) // 记录关注的游戏
+  const [search, setSearch] = useState('')
+  const [loading, setLoading] = useState(true)
+  
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [newGameName, setNewGameName] = useState('')
+  const [coverFile, setCoverFile] = useState<File | null>(null)
+  const [coverPreview, setCoverPreview] = useState('')
+  const [createMsg, setCreateMsg] = useState('')
+  const [uploading, setUploading] = useState(false)
+  
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  async function fetchGames(keyword: string = '') {
-    setGamesLoading(true);
-    let query = supabase
-      .from('games')
-      .select('*, creator:users_profile(nickname)')
-      .is('parent_id', null)
-      .order('created_at', { ascending: false });
-
-    if (keyword) query = query.ilike('name', `%${keyword}%`);
-
-    const { data } = await query;
-    if (data) setGames(data as Game[]);
-    setAppliedSearch(keyword);
-    setGamesLoading(false);
+  // 判断是否是最高权限管理员
+  const isAdmin = (uid: number) => {
+    const admins = [1, 10000, 11111, 22222, 33333, 44444, 55555, 66666, 77777, 88888, 99999]
+    return admins.includes(uid)
   }
 
   useEffect(() => {
-    (async () => {
-      // 当前登录用户
-      const {
-        data: { user: authUser },
-      } = await supabase.auth.getUser();
-
-      if (authUser) {
-        const { data: profile } = await supabase
-          .from('users_profile')
-          .select('*')
-          .eq('auth_id', authUser.id)
-          .single();
-        if (profile) setUser(profile as Profile);
+    async function init() {
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          const { data } = await supabase.from('users_profile').select('*').eq('auth_id', user.id).single()
+          if (data) {
+            setUserProfile(data)
+            // 获取当前用户关注了哪些游戏
+            const { data: followsData } = await supabase.from('game_follows').select('game_id').eq('user_id', data.id)
+            if (followsData) setFollowedGameIds(followsData.map(f => f.game_id))
+          }
+        }
+        await fetchGames()
+        await fetchLeaderboard()
+      } catch (err) {
+        console.error("初始化数据报错:", err)
+      } finally {
+        setLoading(false)
       }
+    }
+    init()
+  }, [])
 
-      await fetchGames();
+  async function fetchGames(keyword = '') {
+    try {
+      let query = supabase.from('games').select(`*, creator:users_profile(nickname)`).order('created_at', { ascending: false })
+      if (keyword) query = query.ilike('name', `%${keyword}%`)
+      const { data, error } = await query
+      if (!error && data) setGames(data)
+    } catch (err) {}
+  }
 
-      // 荣耀排行 TOP 10
-      const { data: ranks } = await supabase
-        .from('users_profile')
-        .select('id, nickname, avatar_url, experience')
-        .order('experience', { ascending: false })
-        .limit(10);
-      if (ranks) setLeaderboard(ranks as RankRow[]);
-      setRankLoading(false);
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  async function fetchLeaderboard() {
+    try {
+      const { data } = await supabase.from('users_profile').select('id, nickname, avatar_url, experience').order('experience', { ascending: false }).limit(30)
+      if (data) {
+        const hiddenAdminIds = [10000, 11111, 22222, 33333, 44444, 55555, 66666, 77777, 88888, 99999]
+        const filteredData = data.filter(user => !hiddenAdminIds.includes(user.id) || user.id === 1)
+        setLeaderboard(filteredData.slice(0, 10))
+      }
+    } catch (err) {}
+  }
+
+  // 关注/取消关注游戏
+  async function toggleFollowGame(gameId: number, e: React.MouseEvent) {
+    e.preventDefault() // 阻止跳转到详情页
+    e.stopPropagation() // 阻止事件冒泡
+    if (!userProfile) return alert('请先登录！')
+
+    try {
+      const isFollowed = followedGameIds.includes(gameId)
+      if (isFollowed) {
+        await supabase.from('game_follows').delete().eq('user_id', userProfile.id).eq('game_id', gameId)
+        setFollowedGameIds(followedGameIds.filter(id => id !== gameId))
+      } else {
+        await supabase.from('game_follows').insert({ user_id: userProfile.id, game_id: gameId })
+        setFollowedGameIds([...followedGameIds, gameId])
+      }
+    } catch (err: any) {
+      alert('操作失败：' + err.message)
+    }
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setCoverFile(e.target.files[0])
+      setCoverPreview(URL.createObjectURL(e.target.files[0]))
+    }
+  }
+
+  async function handleCreateGame() {
+    if (!newGameName.trim()) return setCreateMsg('请输入游戏名称')
+    if (!userProfile) return setCreateMsg('请先登录')
+    setUploading(true)
+    let coverUrl = ''
+    try {
+      if (coverFile) {
+        const fileName = `game-${Date.now()}.${coverFile.name.split('.').pop()}`
+        const { error } = await supabase.storage.from('game_covers').upload(fileName, coverFile)
+        if (!error) {
+          const { data } = supabase.storage.from('game_covers').getPublicUrl(fileName)
+          coverUrl = data.publicUrl
+        }
+      }
+      await supabase.from('games').insert({ name: newGameName, creator_id: userProfile.id, cover_url: coverUrl })
+      setIsModalOpen(false); setNewGameName(''); setCoverFile(null); setCoverPreview(''); fetchGames() 
+    } catch (err: any) {
+      setCreateMsg('创建失败：' + err.message)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  // 管理员操作：改名 & 删除
+  async function handleUpdateName(gameId: number, oldName: string) {
+    const newName = prompt('请输入新的游戏模块名称：', oldName)
+    if (!newName || newName.trim() === '' || newName === oldName) return
+    await supabase.from('games').update({ name: newName.trim() }).eq('id', gameId)
+    fetchGames()
+  }
+
+  async function handleDeleteGame(gameId: number) {
+    if (!confirm('⚠️ 警告：确定要彻底删除这个游戏模块以及里面的所有通缉令吗？此操作不可逆！')) return
+    await supabase.from('games').delete().eq('id', gameId)
+    fetchGames()
+  }
+
+  async function handleUpdateCover(gameId: number, e: React.ChangeEvent<HTMLInputElement>) {
+    e.preventDefault()
+    if (!e.target.files || !e.target.files[0]) return
+    const file = e.target.files[0]
+    const fileExt = file.name.split('.').pop()
+    const fileName = `game-${gameId}-${Date.now()}.${fileExt}`
+    const { error: uploadError } = await supabase.storage.from('game_covers').upload(fileName, file)
+    if (uploadError) return alert('上传失败：' + uploadError.message)
+    const { data: { publicUrl } } = supabase.storage.from('game_covers').getPublicUrl(fileName)
+    await supabase.from('games').update({ cover_url: publicUrl }).eq('id', gameId)
+    fetchGames()
+  }
 
   return (
-    <div className="min-h-screen bg-[#050B14] text-[#E8EFF7] relative overflow-hidden">
-      {/* 背景图 + 渐变遮罩 */}
-      <div className="fixed inset-0 z-0 pointer-events-none">
-        <div className="absolute inset-0 bg-[url('/bg.png')] bg-cover bg-center bg-no-repeat opacity-[0.12]" />
-        <div className="absolute inset-0 bg-gradient-to-b from-[#050B14]/70 via-[#050B14]/92 to-[#050B14]" />
-      </div>
-
+    <div className="min-h-screen bg-[#050B14] text-gray-200 relative overflow-hidden font-sans">
+      <div className="absolute top-0 left-1/4 w-[50vw] h-[50vw] bg-cyan-600/10 rounded-full blur-[150px] pointer-events-none"></div>
+      <div className="absolute bottom-0 right-1/4 w-[40vw] h-[40vw] bg-fuchsia-600/10 rounded-full blur-[150px] pointer-events-none"></div>
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#1f293733_1px,transparent_1px),linear-gradient(to_bottom,#1f293733_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none"></div>
+      
       <div className="relative z-10">
-        <Header />
+        <Navbar />
 
-        <main className="max-w-[1400px] mx-auto px-4 md:px-6 pt-6 md:pt-8 pb-16">
-          {/* ══ 主视觉：原来是 <img src="/banner.png" />，现在换成动效雷达 ══ */}
-          <div className="w-full mb-7 md:mb-9">
-            <HeroRadar />
+        <main className="max-w-[1400px] mx-auto p-4 md:p-6 pt-8">
+          <div className="w-full flex justify-center mb-8 md:mb-12 relative">
+            <div className="w-full"><HeroRadar /></div>
           </div>
 
-          <div className="flex flex-col lg:flex-row gap-5 lg:gap-7">
-            <Leaderboard leaderboard={leaderboard} loading={rankLoading} />
+          {/* 战队大厅入口 */}
+          <div className="mb-8 w-full max-w-4xl mx-auto">
+            <Link href="/teams" className="group relative flex items-center justify-between p-6 bg-gradient-to-r from-cyan-900/40 to-blue-900/40 border border-cyan-500/30 rounded-2xl hover:border-cyan-400 transition-all shadow-[0_0_20px_rgba(6,182,212,0.2)] hover:shadow-[0_0_30px_rgba(6,182,212,0.4)] overflow-hidden">
+              <div className="absolute inset-0 bg-[url('/logo.png')] bg-right bg-no-repeat bg-contain opacity-5 pointer-events-none group-hover:scale-110 transition-transform"></div>
+              <div className="relative z-10">
+                <h2 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400 font-orbitron mb-1">战队大厅</h2>
+                <p className="text-sm text-cyan-500/70 font-mono">// 加入公会，寻找你的最强战队</p>
+              </div>
+              <div className="relative z-10 text-cyan-400 group-hover:translate-x-2 transition-transform text-2xl">→</div>
+            </Link>
+          </div>
 
-            <div className="w-full lg:flex-1 min-w-0">
-              <SectionHeader
-                count={gamesLoading ? '同步中' : `${games.length} 个节点`}
-              >
-                游戏大厅
-              </SectionHeader>
-
-              <HallToolbar
-                search={search}
-                setSearch={setSearch}
-                onSearch={() => fetchGames(search)}
-                loading={gamesLoading}
-                onCreateClick={() => setCreateOpen(true)}
-              />
-
-              {gamesLoading ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {[0, 1, 2, 3, 4, 5].map((i) => (
-                    <div
-                      key={i}
-                      className="rounded-xl overflow-hidden border border-white/[0.06] bg-white/[0.02]"
-                    >
-                      <div className="aspect-video bg-white/[0.03]" />
-                      <div className="p-3.5 space-y-2">
-                        <div className="h-3 w-2/3 rounded bg-white/[0.05]" />
-                        <div className="h-2.5 w-1/3 rounded bg-white/[0.04]" />
-                      </div>
-                    </div>
-                  ))}
+          <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
+            
+            {/* 左侧：排行榜面板 */}
+            <div className="w-full lg:w-1/4 flex-shrink-0">
+              <div className="bg-[#0A111F]/90 backdrop-blur-xl border border-cyan-900/50 rounded-2xl p-5 shadow-[0_0_30px_rgba(0,0,0,0.5)] lg:sticky lg:top-24 transition-all duration-300 hover:border-cyan-500/50">
+                <div className="flex items-center gap-2 mb-4 md:mb-6 border-b border-cyan-900/50 pb-3 md:pb-4">
+                  <span className="text-xl drop-shadow-[0_0_8px_rgba(250,204,21,0.8)]">🏆</span>
+                  <h2 className="text-lg font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 tracking-wider font-orbitron">荣耀排行榜</h2>
                 </div>
-              ) : games.length === 0 ? (
-                <EmptyState
-                  title={
-                    appliedSearch
-                      ? `没有找到「${appliedSearch}」相关的游戏`
-                      : '还没有游戏节点'
-                  }
-                  description={
-                    appliedSearch
-                      ? '换个关键词试试，或者直接创建一个新节点'
-                      : '创建第一个节点，开始召集搭子'
-                  }
-                />
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {games.map((game) => (
-                    <Link
-                      key={game.id}
-                      href={`/game?id=${game.id}`}
-                      className="group rounded-xl overflow-hidden border border-white/[0.06] bg-[#0A111F]/60 hover:border-white/[0.14] hover:bg-[#0D1626] transition-colors"
-                    >
-                      <div className="aspect-video w-full bg-black/50 relative overflow-hidden">
-                        {game.cover_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={game.cover_url}
-                            alt={game.name}
-                            className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity"
-                          />
-                        ) : (
-                          <div className="absolute inset-0 flex items-center justify-center text-[11px] text-white/15">
-                            暂无封面
-                          </div>
-                        )}
-                      </div>
-                      <div className="p-3.5">
-                        <div className="flex items-center justify-between gap-2">
-                          <h3 className="text-[14px] font-semibold text-[#E8EFF7] truncate">
-                            {game.name}
-                          </h3>
-                          <span className="text-[#5C6B7F] group-hover:text-cyan-400 transition-colors text-[11px] shrink-0">
-                            →
-                          </span>
+                
+                <div className="space-y-2">
+                  {leaderboard.map((user, index) => {
+                    const lvl = calculateLevel(user.experience, user.id)
+                    const isTop1 = index === 0
+                    const isTop2 = index === 1
+                    const isTop3 = index === 2
+                    
+                    return (
+                      <div key={user.id} className={`flex items-center gap-3 p-2.5 rounded-xl transition-all duration-300 hover:translate-x-1 ${
+                          isTop1 ? 'bg-gradient-to-r from-yellow-500/20 to-transparent border border-yellow-500/30 shadow-[0_0_15px_rgba(250,204,21,0.2)]' : 
+                          isTop2 ? 'bg-gradient-to-r from-gray-300/10 to-transparent border border-gray-400/20' :
+                          isTop3 ? 'bg-gradient-to-r from-orange-500/10 to-transparent border border-orange-500/20' :
+                          'hover:bg-cyan-900/30'
+                        }`}>
+                        <div className={`w-6 text-center font-black italic font-orbitron ${
+                          isTop1 ? 'text-yellow-400 text-2xl drop-shadow-[0_0_8px_rgba(250,204,21,0.8)]' : 
+                          isTop2 ? 'text-gray-300 text-xl' : 
+                          isTop3 ? 'text-orange-400 text-xl' : 'text-gray-600'
+                        }`}>{index + 1}</div>
+                        
+                        <div className="relative">
+                          <img src={user.avatar_url || '/logo.png'} className="w-9 h-9 md:w-10 md:h-10 rounded-full border-2 border-gray-700 object-cover" />
+                          {user.id === 1 && <span className="absolute -top-3 -left-2 text-sm drop-shadow-md z-10">👑</span>}
                         </div>
-                        <p className="text-[11px] text-[#5C6B7F] mt-1 truncate">
-                          {game.creator?.nickname
-                            ? `创建者 ${game.creator.nickname}`
-                            : '未知创建者'}
-                        </p>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-1">
+                            <p className={`text-sm font-bold truncate ${isTop1 ? 'text-yellow-400' : 'text-gray-200'}`}>{user.nickname}</p>
+                            <span className="text-[10px] font-orbitron font-bold bg-cyan-900/50 text-cyan-300 px-1.5 py-0.5 rounded border border-cyan-500/30 whitespace-nowrap">Lv.{lvl.level}</span>
+                          </div>
+                          <div className="flex items-center justify-between gap-1 mt-0.5">
+                            <p className="text-[10px] text-gray-400 font-mono truncate">{lvl.icon} {lvl.name}</p>
+                            <p className="text-[10px] text-cyan-500 font-orbitron font-bold whitespace-nowrap">EXP:{user.experience}</p>
+                          </div>
+                        </div>
                       </div>
-                    </Link>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* 右侧：游戏大厅 */}
+            <div className="w-full lg:w-3/4">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 md:mb-8">
+                <h2 className="text-2xl md:text-3xl font-black text-white tracking-wider flex items-center gap-3 font-orbitron">
+                  <span className="w-2 h-6 md:h-8 bg-cyan-400 rounded-full shadow-[0_0_15px_rgba(6,182,212,1)]"></span>
+                  游戏接入点
+                </h2>
+                <div className="flex items-center gap-2 w-full md:w-auto">
+                  <div className="flex-1 md:flex-none flex items-center bg-[#0A111F] border border-cyan-900/50 rounded-xl px-3 py-2 md:py-3 focus-within:border-cyan-400 focus-within:shadow-[0_0_15px_rgba(6,182,212,0.3)] transition-all">
+                    <span className="text-cyan-500 mr-2">🔍</span>
+                    <input className="bg-transparent border-none outline-none w-full md:w-56 text-xs md:text-sm text-white placeholder-gray-600" placeholder="搜索游戏..." value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && fetchGames(search)} />
+                  </div>
+                  <button onClick={() => setIsModalOpen(true)} className="bg-blue-600 text-white px-4 py-2 md:py-3 rounded-xl font-black text-xs md:text-sm hover:bg-blue-500 hover:shadow-[0_0_20px_rgba(37,99,235,0.6)] transition-all whitespace-nowrap">+ 创建</button>
+                </div>
+              </div>
+
+              {loading ? (
+                <div className="flex justify-center py-20"><div className="w-12 h-12 border-4 border-cyan-500/30 border-t-cyan-400 rounded-full animate-spin"></div></div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5 md:gap-8">
+                  {games.map(game => (
+                    <div key={game.id} className="relative group bg-[#0A111F] rounded-2xl border border-gray-800 overflow-hidden hover:border-cyan-400 transition-all duration-500 transform hover:-translate-y-2 hover:shadow-[0_10px_40px_rgba(6,182,212,0.3)]">
+                      <Link href={`/game/${game.id}`} className="block relative z-10">
+                        <div className="h-40 md:h-48 w-full bg-black relative overflow-hidden flex items-center justify-center">
+                          {game.cover_url ? (
+                            <img src={game.cover_url} alt={game.name} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 group-hover:scale-110 transition duration-700" />
+                          ) : (
+                            <div className="absolute inset-0 flex items-center justify-center bg-[url('/logo.png')] bg-center bg-no-repeat bg-contain opacity-20 grayscale"></div>
+                          )}
+                          
+                          <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-cyan-500 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                          <div className="absolute top-0 left-0 w-full h-[2px] bg-cyan-400/50 shadow-[0_0_15px_rgba(6,182,212,1)] -translate-y-full group-hover:animate-[scan_2s_ease-in-out_infinite]"></div>
+                        </div>
+                        
+                        <div className="p-5 relative bg-gradient-to-t from-[#0A111F] to-[#0A111F]/90 flex justify-between items-end">
+                          <div className="relative z-10 flex-1 min-w-0 pr-2">
+                            <h3 className="font-black text-xl text-white mb-1 group-hover:text-cyan-400 transition-colors tracking-wide truncate">{game.name}</h3>
+                            <div className="text-xs text-gray-500 font-mono truncate flex items-center gap-1">
+                              CREATOR: 
+                              <span className="text-blue-400 font-bold">{game.creator?.nickname || 'UNKNOWN'}</span>
+                              <span className="text-[9px] bg-yellow-500/20 text-yellow-400 border border-yellow-500/50 px-1.5 py-0.5 rounded shadow-[0_0_8px_rgba(250,204,21,0.4)]">⚡ 先锋</span>
+                            </div>
+                          </div>
+                          
+                          {/* 关注游戏按钮 */}
+                          {userProfile && (
+                            <button 
+                              onClick={(e) => toggleFollowGame(game.id, e)}
+                              className={`relative z-20 shrink-0 px-3 py-1.5 rounded-lg border text-xs font-bold transition-all flex items-center gap-1 ${
+                                followedGameIds.includes(game.id) 
+                                  ? 'bg-cyan-900/40 text-cyan-400 border-cyan-500/50' 
+                                  : 'bg-transparent text-gray-500 border-gray-600 hover:text-cyan-400 hover:border-cyan-500/50'
+                              }`}
+                            >
+                              {followedGameIds.includes(game.id) ? '🔔 已关注' : '🔕 关注'}
+                            </button>
+                          )}
+                        </div>
+                      </Link>
+
+                      {/* 管理员专属操作面板 */}
+                      {userProfile && isAdmin(userProfile.id) && (
+                        <div className="absolute top-3 right-3 z-20 flex gap-1 opacity-0 group-hover:opacity-100 transition-all duration-300">
+                          <button onClick={(e) => { e.preventDefault(); handleUpdateName(game.id, game.name); }} className="bg-black/80 backdrop-blur border border-yellow-500/50 text-yellow-400 text-xs px-2 py-1 rounded hover:bg-yellow-500/20" title="修改名称">✏️</button>
+                          <label className="bg-black/80 backdrop-blur border border-cyan-500/50 text-cyan-400 text-xs px-2 py-1 rounded cursor-pointer hover:bg-cyan-500/20" title="修改封面">
+                            ⚙️
+                            <input type="file" accept="image/*" className="hidden" onChange={(e) => handleUpdateCover(game.id, e)} />
+                          </label>
+                          <button onClick={(e) => { e.preventDefault(); handleDeleteGame(game.id); }} className="bg-black/80 backdrop-blur border border-red-500/50 text-red-400 text-xs px-2 py-1 rounded hover:bg-red-500/20" title="删除模块">🗑️</button>
+                        </div>
+                      )}
+                    </div>
                   ))}
                 </div>
               )}
             </div>
           </div>
         </main>
-
-        <CreateGameModal
-          isOpen={createOpen}
-          onClose={() => setCreateOpen(false)}
-          onSuccess={() => fetchGames(appliedSearch)}
-          currentUserId={user?.id}
-        />
       </div>
+
+      {/* 创建游戏弹窗 */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-[#0A111F]/95 border border-cyan-500/50 rounded-2xl p-8 w-full max-w-md shadow-[0_0_50px_rgba(6,182,212,0.3)] relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-400 via-blue-500 to-cyan-400"></div>
+            
+            <h3 className="text-2xl font-black mb-6 text-white text-center font-orbitron tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">创建游戏模块</h3>
+            
+            <div className="space-y-4">
+              <input className="w-full bg-[#050B14] border border-cyan-900/50 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-400" placeholder="输入游戏名称" value={newGameName} onChange={(e) => setNewGameName(e.target.value)} />
+              <div onClick={() => fileInputRef.current?.click()} className="w-full h-32 border-2 border-dashed border-cyan-900/50 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-cyan-400 hover:bg-cyan-500/5 transition-all overflow-hidden">
+                {coverPreview ? <img src={coverPreview} className="w-full h-full object-cover" /> : <><span className="text-2xl mb-2">🖼️</span><span className="text-gray-400 text-sm">点击上传封面</span></>}
+              </div>
+              <input type="file" className="hidden" ref={fileInputRef} onChange={handleFileChange} />
+            </div>
+            
+            {createMsg && <p className="text-red-400 text-sm text-center mt-4">{createMsg}</p>}
+            
+            <div className="flex gap-4 mt-8">
+              <button onClick={() => setIsModalOpen(false)} className="flex-1 bg-gray-800 text-gray-300 py-3 rounded-xl font-bold hover:bg-gray-700 transition">取消</button>
+              <button onClick={handleCreateGame} disabled={uploading} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-black hover:bg-blue-500 shadow-[0_0_20px_rgba(37,99,235,0.5)] transition-all">
+                {uploading ? '部署中...' : '确认创建'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
-  );
+  )
 }

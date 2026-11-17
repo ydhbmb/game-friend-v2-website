@@ -4,6 +4,7 @@
  * 僚机雷达 · 主视觉（方案 C：动效主视觉）
  * ------------------------------------------------------------
  * 单文件、零依赖：不需要 styled-jsx、不需要改 globals.css、不需要装包。
+ * 直接把这个文件放进 components/HeroRadar.tsx 即可食用。
  *
  * 用法：
  *   import HeroRadar from '@/components/HeroRadar';
@@ -321,52 +322,78 @@ export default function HeroRadar() {
 }
 
 /**
- * 导航栏 / 页脚用的小图标（可选）
+ * 导航栏 / 页脚用的小图标（可选）。
  * <RadarMark size={32} />
  */
 export function RadarMark({ size = 32 }: { size?: number }) {
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 64 64"
-      role="img"
-      aria-label="僚机雷达"
-      style={{ display: 'block', flex: 'none' }}
-    >
-      <defs>
-        <radialGradient id="rmGlow" cx="32" cy="32" r="26" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor={ACCENT} stopOpacity="0.22" />
-          <stop offset="1" stopColor={ACCENT} stopOpacity="0" />
-        </radialGradient>
-        <radialGradient id="rmSweep" cx="32" cy="32" r="26" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor={ACCENT} stopOpacity="0.55" />
-          <stop offset="1" stopColor={ACCENT} stopOpacity="0" />
-        </radialGradient>
-      </defs>
-      <circle cx="32" cy="32" r="26" fill="url(#rmGlow)" />
-      <circle cx="32" cy="32" r="10" fill="none" stroke={ACCENT} strokeOpacity="0.45" strokeWidth="1.4" />
-      <circle cx="32" cy="32" r="18" fill="none" stroke={ACCENT} strokeOpacity="0.26" strokeWidth="1.2" />
-      <circle cx="32" cy="32" r="26" fill="none" stroke={ACCENT} strokeOpacity="0.16" strokeWidth="1.2" />
-      <g className="rm-sweep">
-        <path d="M32 32 L32 6 A26 26 0 0 1 54.5 19 Z" fill="url(#rmSweep)" />
-      </g>
-      <circle cx="32" cy="32" r="3.2" fill="#EAFBFF" />
-      <circle cx="22" cy="24" r="2.1" fill={ACCENT} />
-      <circle cx="40" cy="41" r="1.7" fill={ACCENT} opacity="0.8" />
-      <style>{`
-        .rm-sweep {
-          animation: rmSpin 3.6s linear infinite;
-          transform-origin: 32px 32px;
-        }
-        @keyframes rmSpin {
-          from { transform: rotate(0deg) }
-          to { transform: rotate(360deg) }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .rm-sweep { animation: none }
-        }
-      `}</style>
-    </svg>
+    <>
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 64 64"
+        role="img"
+        aria-label="僚机雷达"
+        style={{ display: 'block', flex: 'none' }}
+      >
+        <defs>
+          <radialGradient id="rmGlow" cx="32" cy="32" r="26" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stopColor={ACCENT} stopOpacity="0.22" />
+            <stop offset="1" stopColor={ACCENT} stopOpacity="0" />
+          </radialGradient>
+          <radialGradient id="rmSweep" cx="32" cy="32" r="26" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stopColor={ACCENT} stopOpacity="0.55" />
+            <stop offset="1" stopColor={ACCENT} stopOpacity="0" />
+          </radialGradient>
+        </defs>
+        <circle cx="32" cy="32" r="26" fill="url(#rmGlow)" />
+        <circle
+          cx="32"
+          cy="32"
+          r="10"
+          fill="none"
+          stroke={ACCENT}
+          strokeOpacity="0.45"
+          strokeWidth="1.4"
+        />
+        <circle
+          cx="32"
+          cy="32"
+          r="18"
+          fill="none"
+          stroke={ACCENT}
+          strokeOpacity="0.26"
+          strokeWidth="1.2"
+        />
+        <circle
+          cx="32"
+          cy="32"
+          r="26"
+          fill="none"
+          stroke={ACCENT}
+          strokeOpacity="0.16"
+          strokeWidth="1.2"
+        />
+        <g className="rm-sweep">
+          <path d="M32 32 L32 6 A26 26 0 0 1 54.5 19 Z" fill="url(#rmSweep)" />
+        </g>
+        <circle cx="32" cy="32" r="3.2" fill="#EAFBFF" />
+        <circle cx="22" cy="24" r="2.1" fill={ACCENT} />
+        <circle cx="40" cy="41" r="1.7" fill={ACCENT} opacity="0.8" />
+        <style>{`
+          .rm-sweep {
+            animation: rmSpin 3.6s linear infinite;
+            transform-origin: 32px 32px;
+          }
+          @keyframes rmSpin {
+            from { transform: rotate(0deg) }
+            to { transform: rotate(360deg) }
+          }
+          @media (prefers-reduced-motion: reduce) {
+            .rm-sweep { animation: none }
+          }
+        `}</style>
+      </svg>
+    </>
   );
 }
