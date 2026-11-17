@@ -5,6 +5,10 @@ import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import Navbar from '@/components/Navbar'
 import { calculateLevel } from '@/lib/levels'
+import Card from '@/components/ui/Card'
+import Button from '@/components/ui/Button'
+import Badge from '@/components/ui/Badge'
+import SectionTitle from '@/components/ui/SectionTitle'
 
 export default function UserCenterPage() {
   const router = useRouter()
@@ -13,24 +17,28 @@ export default function UserCenterPage() {
   const [newPassword, setNewPassword] = useState('')
   const [msg, setMsg] = useState('')
   const [loading, setLoading] = useState(false)
-  
+
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [avatarPreview, setAvatarPreview] = useState('')
 
-  // 🔥 成就与称号状态
   const [myAchievements, setMyAchievements] = useState<any[]>([])
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       if (data.user) {
-        supabase.from('users_profile').select('*').eq('auth_id', data.user.id).single().then(({ data: p }) => {
-          if (p) {
-            setProfile(p)
-            setNickname(p.nickname || '')
-            setAvatarPreview(p.avatar_url || '')
-            fetchAchievements(p.id)
-          }
-        })
+        supabase
+          .from('users_profile')
+          .select('*')
+          .eq('auth_id', data.user.id)
+          .single()
+          .then(({ data: p }) => {
+            if (p) {
+              setProfile(p)
+              setNickname(p.nickname || '')
+              setAvatarPreview(p.avatar_url || '')
+              fetchAchievements(p.id)
+            }
+          })
       } else {
         router.push('/login')
       }
@@ -38,26 +46,23 @@ export default function UserCenterPage() {
   }, [router])
 
   async function fetchAchievements(userId: number) {
-    // 联表查询：查出该用户解锁的所有成就
     const { data } = await supabase
       .from('user_achievements')
       .select(`*, achievement:achievements(*)`)
       .eq('user_id', userId)
-    
     if (data) setMyAchievements(data)
   }
 
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0]
-      if (file.size > 500 * 1024) {
-        alert('头像图片不能超过 500KB，请压缩后再上传！')
-        e.target.value = ''
-        return
-      }
-      setAvatarFile(file)
-      setAvatarPreview(URL.createObjectURL(file))
+  function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 500 * 1024) {
+      alert('头像不能超过 500KB，请压缩后再上传')
+      e.target.value = ''
+      return
     }
+    setAvatarFile(file)
+    setAvatarPreview(URL.createObjectURL(file))
   }
 
   async function updateProfile(e: any) {
@@ -67,19 +72,30 @@ export default function UserCenterPage() {
 
     const newNickname = e.target.nickname.value.trim()
     if (newNickname.length === 0 || newNickname.length > 9) {
-      setMsg('昵称长度必须在 1-9 个字符之间'); setLoading(false); return
+      setMsg('昵称长度必须在 1-9 个字符之间')
+      setLoading(false)
+      return
     }
 
     if (newNickname !== profile.nickname) {
-      const { data: exist } = await supabase.from('users_profile').select('id').eq('nickname', newNickname).neq('id', profile.id).single()
+      const { data: exist } = await supabase
+        .from('users_profile')
+        .select('id')
+        .eq('nickname', newNickname)
+        .neq('id', profile.id)
+        .maybeSingle()
       if (exist) {
-        setMsg('该昵称已被其他玩家使用'); setLoading(false); return
+        setMsg('该昵称已被其他玩家使用')
+        setLoading(false)
+        return
       }
     }
 
     let newAvatarUrl = profile.avatar_url
     if (avatarFile) {
-      const fileName = `avatar-${profile.id}-${Date.now()}.${avatarFile.name.split('.').pop()}`
+      const fileName = `avatar-${profile.id}-${Date.now()}.${avatarFile.name
+        .split('.')
+        .pop()}`
       const { error } = await supabase.storage.from('avatars').upload(fileName, avatarFile)
       if (!error) {
         const { data } = supabase.storage.from('avatars').getPublicUrl(fileName)
@@ -87,148 +103,296 @@ export default function UserCenterPage() {
       }
     }
 
-    const { error } = await supabase.from('users_profile').update({
-      nickname: newNickname,
-      qq: e.target.qq.value,
-      wechat: e.target.wechat.value,
-      yy: e.target.yy.value,
-      avatar_url: newAvatarUrl
-    }).eq('id', profile.id)
+    const { error } = await supabase
+      .from('users_profile')
+      .update({
+        nickname: newNickname,
+        qq: e.target.qq.value,
+        wechat: e.target.wechat.value,
+        yy: e.target.yy.value,
+        avatar_url: newAvatarUrl,
+      })
+      .eq('id', profile.id)
 
     setLoading(false)
+
     if (error) {
       setMsg('更新失败：' + error.message)
     } else {
-      setMsg('资料更新成功！')
-      setProfile({ ...profile, nickname: newNickname, qq: e.target.qq.value, wechat: e.target.wechat.value, yy: e.target.yy.value, avatar_url: newAvatarUrl })
+      setMsg('资料已更新')
+      setProfile({
+        ...profile,
+        nickname: newNickname,
+        qq: e.target.qq.value,
+        wechat: e.target.wechat.value,
+        yy: e.target.yy.value,
+        avatar_url: newAvatarUrl,
+      })
+      setNickname(newNickname)
+      setAvatarFile(null)
       router.refresh()
     }
   }
 
   async function updatePassword() {
     if (!newPassword) return
-    if (newPassword.length < 6) return setMsg('密码长度至少6位')
+    if (newPassword.length < 6) return setMsg('密码至少 6 位')
     setLoading(true)
     const { error } = await supabase.auth.updateUser({ password: newPassword })
     setLoading(false)
-    if (error) setMsg(error.message)
-    else {
-      setMsg('密码修改成功！')
+    if (error) {
+      setMsg(error.message)
+    } else {
+      setMsg('密码已修改')
       setNewPassword('')
     }
   }
 
-  // 🔥 佩戴称号
   async function equipTitle(title: string | null) {
     setLoading(true)
-    const { error } = await supabase.from('users_profile').update({ equipped_title: title }).eq('id', profile.id)
+    const { error } = await supabase
+      .from('users_profile')
+      .update({ equipped_title: title })
+      .eq('id', profile.id)
     setLoading(false)
     if (!error) {
       setProfile({ ...profile, equipped_title: title })
-      alert(title ? `成功佩戴称号：${title}` : '已隐藏当前称号')
     }
   }
 
-  if (!profile) return <div className="min-h-screen bg-[#050B14]"></div>
+  if (!profile) {
+    return (
+      <div className="min-h-screen bg-[#050B14] flex items-center justify-center text-[#5C6B7F] text-[13px]">
+        加载中…
+      </div>
+    )
+  }
 
   const levelInfo = calculateLevel(profile.experience || 0, profile.id)
-  const progressPercent = levelInfo.isMaxLevel ? 100 : Math.min(100, Math.floor((levelInfo.currentLevelExp / levelInfo.nextLevelExp) * 100))
+  const progressPercent = levelInfo.isMaxLevel
+    ? 100
+    : Math.min(
+        100,
+        Math.floor((levelInfo.currentLevelExp / levelInfo.nextLevelExp) * 100)
+      )
+
+  const inputCls =
+    'w-full h-10 rounded-lg bg-white/[0.03] border border-white/[0.08] px-3 text-[13px] text-[#E8EFF7] placeholder-[#4A5768] outline-none focus:border-cyan-500/50 transition-colors'
 
   return (
-    <div className="min-h-screen bg-[#050B14] text-gray-200 pb-20">
+    <div className="min-h-screen bg-[#050B14] text-[#E8EFF7] pb-20">
       <Navbar />
-      <div className="max-w-2xl mx-auto p-6 mt-10 bg-[#0A111F]/80 border border-cyan-500/30 rounded-2xl shadow-[0_0_30px_rgba(6,182,212,0.15)] backdrop-blur-md">
-        <h1 className="text-2xl font-black text-cyan-400 mb-6 border-b border-gray-800 pb-4 font-orbitron">用户中心</h1>
-        
-        {msg && <div className={`mb-4 p-2 rounded font-bold ${msg.includes('成功') ? 'text-green-400 bg-green-400/10' : 'text-red-400 bg-red-400/10'}`}>{msg}</div>}
 
-        {/* 赛博等级面板 */}
-        <div className="mb-8 p-5 bg-black/40 border border-cyan-900/50 rounded-xl relative overflow-hidden">
-          <div className="flex justify-between items-end mb-2 relative z-10">
-            <div>
-              <span className="text-sm text-gray-400">当前头衔</span>
-              <h2 className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">{levelInfo.icon} {levelInfo.name}</h2>
-            </div>
-            <div className="text-right">
-              <span className="text-3xl font-black text-white font-orbitron">Lv.{levelInfo.level}</span>
-            </div>
-          </div>
-          <div className="mt-4 relative z-10">
-            <div className="flex justify-between text-xs text-cyan-500 mb-1 font-mono">
-              <span>EXP: {profile.experience || 0}</span>
-              <span>{levelInfo.isMaxLevel ? '已满级' : `距离升级还需 ${levelInfo.nextLevelExp - levelInfo.currentLevelExp} 经验`}</span>
-            </div>
-            <div className="w-full h-3 bg-gray-900 rounded-full overflow-hidden border border-gray-700">
-              <div className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 shadow-[0_0_10px_rgba(6,182,212,0.8)] transition-all duration-1000" style={{ width: `${progressPercent}%` }}></div>
-            </div>
-          </div>
+      <div className="max-w-2xl mx-auto px-4 md:px-6 pt-6 md:pt-8">
+
+        <div className="mb-4">
+          <h1 className="text-xl font-semibold text-white">用户中心</h1>
+          <p className="text-[11.5px] text-[#5C6B7F] mt-1">
+            管理你的资料、头像与称号
+          </p>
         </div>
 
-        {/* 🔥 荣誉殿堂 */}
-        <div className="mb-8 p-5 bg-gradient-to-br from-fuchsia-900/20 to-transparent border border-fuchsia-500/30 rounded-xl">
-          <div className="flex justify-between items-center mb-4 border-b border-fuchsia-500/20 pb-2">
-            <h2 className="text-lg font-black text-fuchsia-400 font-orbitron flex items-center gap-2">🏆 荣誉殿堂</h2>
-            <button onClick={() => equipTitle(null)} className="text-[10px] text-gray-400 hover:text-white underline">隐藏当前称号</button>
-          </div>
-          
-          <div className="flex flex-wrap gap-3">
-            {myAchievements.map(a => {
-              const isEquipped = profile.equipped_title === a.achievement?.title
-              return (
-                <div 
-                  key={a.id} 
-                  onClick={() => equipTitle(a.achievement?.title)}
-                  className={`cursor-pointer px-4 py-2 rounded-lg border text-sm transition-all flex flex-col items-center justify-center min-w-[100px] ${
-                    isEquipped 
-                      ? 'bg-fuchsia-600/30 border-fuchsia-500 text-white shadow-[0_0_15px_rgba(217,70,239,0.3)] scale-105' 
-                      : 'bg-black/40 border-gray-700 text-gray-400 hover:border-fuchsia-500/50'
-                  }`}
-                >
-                  <span className="font-bold text-base mb-1">{a.achievement?.title}</span>
-                  <span className="text-[10px] opacity-70">{a.achievement?.name}</span>
-                </div>
-              )
-            })}
-            {myAchievements.length === 0 && <p className="text-xs text-gray-500">还没有解锁任何称号，快去社交或签到吧！</p>}
-          </div>
-        </div>
+        {msg && (
+          <p
+            className={`text-[11.5px] rounded-lg px-3 py-2 mb-4 border ${
+              msg.includes('失败') || msg.includes('至少') || msg.includes('必须') || msg.includes('已被')
+                ? 'text-red-400 bg-red-500/10 border-red-500/20'
+                : 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20'
+            }`}
+          >
+            {msg}
+          </p>
+        )}
 
-        <form onSubmit={updateProfile} className="space-y-6 mb-8">
-          <div className="flex items-center gap-6 pb-6 border-b border-gray-800">
-            <div className="relative group">
-              <div className="w-24 h-24 rounded-full bg-black overflow-hidden border-2 border-cyan-500/50 shadow-[0_0_15px_rgba(6,182,212,0.3)]">
-                {avatarPreview ? <img src={avatarPreview} alt="头像" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-gray-500 text-xs">无头像</div>}
+        <Card className="mb-4">
+          <div className="flex items-center gap-4 mb-4">
+            <div className="relative group shrink-0">
+              <div className="w-16 h-16 rounded-full bg-black overflow-hidden border border-white/[0.08]">
+                {avatarPreview ? (
+                  <img
+                    src={avatarPreview}
+                    alt="头像"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-[10px] text-[#4A5768]">
+                    无头像
+                  </div>
+                )}
               </div>
-              <label className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity rounded-full text-xs text-cyan-400 font-bold">
-                <span>更换头像</span>
-                <input type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+              <label className="absolute inset-0 rounded-full bg-black/70 flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity text-[10px] text-cyan-400 font-medium">
+                更换
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleAvatarChange}
+                />
               </label>
             </div>
-            <div>
-              <h2 className="text-lg text-white font-bold">{profile.username}</h2>
-              <p className="text-sm text-gray-500 font-mono">ID: {profile.id}</p>
-              <p className="text-xs text-gray-600 mt-1">头像需小于 500KB</p>
+
+            <div className="min-w-0">
+              <p className="text-[14px] font-medium text-white truncate">
+                {profile.username}
+              </p>
+              <p className="text-[11px] text-[#5C6B7F] font-mono mt-0.5">
+                ID:{profile.id}
+              </p>
+              <p className="text-[10.5px] text-[#4A5768] mt-1">头像需小于 500KB</p>
             </div>
           </div>
 
-          <h2 className="text-lg text-blue-400 font-orbitron">修改基础资料</h2>
-          <div>
-            <label className="block text-xs text-cyan-600 mb-1">昵称（唯一且最多9个字）</label>
-            <input value={nickname} onChange={(e) => setNickname(e.target.value)} name="nickname" placeholder="输入新昵称" className="w-full bg-[#050B14] border border-cyan-900/50 rounded-lg p-3 text-white outline-none focus:border-cyan-500" />
+          <div className="rounded-lg bg-white/[0.03] border border-white/[0.06] p-3">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <Badge tone="accent">Lv.{levelInfo.level}</Badge>
+                <span className="text-[12px] text-[#94A3B8] truncate">
+                  {levelInfo.name}
+                </span>
+              </div>
+              <span className="text-[11px] text-cyan-400 tabular-nums shrink-0">
+                {profile.experience || 0} EXP
+              </span>
+            </div>
+            <div className="w-full h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+              <div
+                className="h-full rounded-full bg-cyan-500 transition-all duration-700"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+            <p className="text-[10px] text-[#4A5768] mt-2 tabular-nums">
+              {levelInfo.isMaxLevel
+                ? '已达最高等级'
+                : `距下一级还需 ${levelInfo.nextLevelExp - levelInfo.currentLevelExp} 经验`}
+            </p>
           </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div><label className="block text-xs text-cyan-600 mb-1">QQ</label><input defaultValue={profile.qq || ''} name="qq" placeholder="QQ" className="w-full bg-[#050B14] border border-cyan-900/50 rounded-lg p-3 text-white outline-none focus:border-cyan-500" /></div>
-            <div><label className="block text-xs text-cyan-600 mb-1">微信</label><input defaultValue={profile.wechat || ''} name="wechat" placeholder="微信" className="w-full bg-[#050B14] border border-cyan-900/50 rounded-lg p-3 text-white outline-none focus:border-cyan-500" /></div>
-            <div><label className="block text-xs text-cyan-600 mb-1">YY</label><input defaultValue={profile.yy || ''} name="yy" placeholder="YY" className="w-full bg-[#050B14] border border-cyan-900/50 rounded-lg p-3 text-white outline-none focus:border-cyan-500" /></div>
-          </div>
-          <button type="submit" disabled={loading} className="bg-blue-600 px-8 py-3 rounded-lg font-black tracking-wider text-white hover:bg-blue-500 shadow-[0_0_15px_rgba(37,99,235,0.4)] disabled:opacity-50 transition-all font-orbitron">{loading ? '保存中...' : '保存资料'}</button>
-        </form>
+        </Card>
 
-        <div className="space-y-4 pt-8 border-t border-gray-800">
-          <h2 className="text-lg text-blue-400 font-orbitron">修改登录密码</h2>
-          <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="输入新密码 (至少6位)" className="w-full bg-[#050B14] border border-cyan-900/50 rounded-lg p-3 text-white outline-none focus:border-cyan-500" />
-          <button onClick={updatePassword} disabled={loading} className="bg-red-600 px-8 py-3 rounded-lg font-black tracking-wider text-white hover:bg-red-500 shadow-[0_0_15px_rgba(220,38,38,0.4)] disabled:opacity-50 transition-all font-orbitron">{loading ? '修改中...' : '修改密码'}</button>
-        </div>
+        <Card className="mb-4">
+          <SectionTitle
+            action={
+              profile.equipped_title ? (
+                <button
+                  onClick={() => equipTitle(null)}
+                  className="text-[11px] text-[#5C6B7F] hover:text-[#94A3B8] transition-colors"
+                >
+                  隐藏当前称号
+                </button>
+              ) : undefined
+            }
+          >
+            荣誉殿堂
+          </SectionTitle>
+
+          {myAchievements.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {myAchievements.map((a) => {
+                const isEquipped = profile.equipped_title === a.achievement?.title
+                return (
+                  <button
+                    key={a.id}
+                    onClick={() => equipTitle(a.achievement?.title)}
+                    className={`px-2.5 py-1.5 rounded-md border text-left transition-colors ${
+                      isEquipped
+                        ? 'bg-cyan-500/12 border-cyan-500/30'
+                        : 'bg-white/[0.03] border-white/[0.06] hover:border-white/[0.14]'
+                    }`}
+                  >
+                    <span
+                      className={`block text-[12px] font-medium ${
+                        isEquipped ? 'text-cyan-300' : 'text-[#E8EFF7]'
+                      }`}
+                    >
+                      {a.achievement?.title}
+                    </span>
+                    <span className="block text-[10px] text-[#4A5768] mt-0.5">
+                      {a.achievement?.name}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          ) : (
+            <p className="text-[11.5px] text-[#4A5768]">
+              还没有解锁任何称号，去社交或签到吧
+            </p>
+          )}
+        </Card>
+
+        <Card className="mb-4">
+          <SectionTitle>基础资料</SectionTitle>
+
+          <form onSubmit={updateProfile} className="space-y-3">
+            <div>
+              <label className="block text-[11px] text-[#5C6B7F] mb-1.5">
+                昵称 <span className="text-[#4A5768]">（唯一，最多 9 字）</span>
+              </label>
+              <input
+                name="nickname"
+                value={nickname}
+                onChange={(e) => setNickname(e.target.value)}
+                placeholder="输入新昵称"
+                className={inputCls}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[11px] text-[#5C6B7F] mb-1.5">QQ</label>
+                <input
+                  name="qq"
+                  defaultValue={profile.qq || ''}
+                  placeholder="选填"
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] text-[#5C6B7F] mb-1.5">微信</label>
+                <input
+                  name="wechat"
+                  defaultValue={profile.wechat || ''}
+                  placeholder="选填"
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] text-[#5C6B7F] mb-1.5">YY</label>
+                <input
+                  name="yy"
+                  defaultValue={profile.yy || ''}
+                  placeholder="选填"
+                  className={inputCls}
+                />
+              </div>
+            </div>
+
+            <div className="pt-1">
+              <Button type="submit" variant="primary" loading={loading}>
+                保存资料
+              </Button>
+            </div>
+          </form>
+        </Card>
+
+        <Card>
+          <SectionTitle>登录密码</SectionTitle>
+          <div className="space-y-3">
+            <input
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="输入新密码（至少 6 位）"
+              className={inputCls}
+            />
+            <Button
+              variant="danger"
+              onClick={updatePassword}
+              disabled={loading || !newPassword}
+            >
+              修改密码
+            </Button>
+          </div>
+        </Card>
       </div>
     </div>
   )

@@ -6,11 +6,17 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import Navbar from '@/components/Navbar'
 import FollowUserButton from '@/components/FollowUserButton'
 import UserName from '@/components/UserName'
+import Button from '@/components/ui/Button'
+import Badge from '@/components/ui/Badge'
+import Card from '@/components/ui/Card'
+import SectionTitle from '@/components/ui/SectionTitle'
+import EmptyState from '@/components/ui/EmptyState'
 
 import ModalPostRecruit from '@/components/ModalPostRecruit'
 import ModalPostForum from '@/components/ModalPostForum'
 import ModalRecruitComments from '@/components/ModalRecruitComments'
 import ModalForumDetail from '@/components/ModalForumDetail'
+import ModalCreateGame from '@/components/ModalCreateGame'
 
 function GameDetailContent() {
   const searchParams = useSearchParams()
@@ -31,6 +37,7 @@ function GameDetailContent() {
 
   const [isPostingRecruit, setIsPostingRecruit] = useState(false)
   const [isPostingForum, setIsPostingForum] = useState(false)
+  const [isCreatingSub, setIsCreatingSub] = useState(false)
   const [activeRecruit, setActiveRecruit] = useState<any>(null)
   const [activePost, setActivePost] = useState<any>(null)
   const [comments, setComments] = useState<any[]>([])
@@ -43,49 +50,92 @@ function GameDetailContent() {
       try {
         const { data: { user } } = await supabase.auth.getUser()
         if (user) {
-          const { data } = await supabase.from('users_profile').select('*').eq('auth_id', user.id).single()
+          const { data } = await supabase
+            .from('users_profile')
+            .select('*')
+            .eq('auth_id', user.id)
+            .single()
           if (data) {
             setUserProfile(data)
-            const { data: l } = await supabase.from('likes').select('recruit_id').eq('user_id', data.id)
-            if (l) setLikedIds(l.map(x => x.recruit_id))
-            const { data: rf } = await supabase.from('recruit_follows').select('recruit_id').eq('user_id', data.id)
-            if (rf) setFollowedRecruitIds(rf.map(x => x.recruit_id))
-            const { data: gf } = await supabase.from('game_follows').select('id').eq('user_id', data.id).eq('game_id', gameId).single()
+            const { data: l } = await supabase
+              .from('likes')
+              .select('recruit_id')
+              .eq('user_id', data.id)
+            if (l) setLikedIds(l.map((x) => x.recruit_id))
+
+            const { data: rf } = await supabase
+              .from('recruit_follows')
+              .select('recruit_id')
+              .eq('user_id', data.id)
+            if (rf) setFollowedRecruitIds(rf.map((x) => x.recruit_id))
+
+            const { data: gf } = await supabase
+              .from('game_follows')
+              .select('id')
+              .eq('user_id', data.id)
+              .eq('game_id', gameId)
+              .maybeSingle()
             if (gf) setIsFollowingGame(true)
           }
         }
 
-        const { data: gameData } = await supabase.from('games').select(`*, creator:users_profile(nickname)`).eq('id', gameId).single()
+        const { data: gameData } = await supabase
+          .from('games')
+          .select(`*, creator:users_profile(nickname)`)
+          .eq('id', gameId)
+          .single()
         setGame(gameData)
 
         if (gameData && !gameData.parent_id) {
-          const { data: subs } = await supabase.from('games').select(`*`).eq('parent_id', gameId).order('created_at', { ascending: false })
+          const { data: subs } = await supabase
+            .from('games')
+            .select(`*`)
+            .eq('parent_id', gameId)
+            .order('created_at', { ascending: false })
           if (subs) setSubGames(subs)
         }
+
         await fetchRecruits()
         await fetchPosts()
-      } catch (err) {} finally { setLoading(false) }
+      } catch (err) {
+      } finally {
+        setLoading(false)
+      }
     }
     init()
   }, [gameId])
 
   async function fetchRecruits() {
-    const { data } = await supabase.from('recruits').select(`*, creator:users_profile(nickname, avatar_url, id), likes(id)`).eq('game_id', gameId).order('created_at', { ascending: false })
+    const { data } = await supabase
+      .from('recruits')
+      .select(`*, creator:users_profile(nickname, avatar_url, id), likes(id)`)
+      .eq('game_id', gameId)
+      .order('created_at', { ascending: false })
     if (data) setRecruits(data)
   }
 
   async function fetchPosts() {
-    const { data } = await supabase.from('posts').select(`*, user:users_profile(nickname, avatar_url, id)`).eq('game_id', gameId).order('created_at', { ascending: false })
+    const { data } = await supabase
+      .from('posts')
+      .select(`*, user:users_profile(nickname, avatar_url, id)`)
+      .eq('game_id', gameId)
+      .order('created_at', { ascending: false })
     if (data) setPosts(data)
   }
 
   async function toggleFollowGame() {
     if (!userProfile) return alert('请先登录！')
     if (isFollowingGame) {
-      await supabase.from('game_follows').delete().eq('user_id', userProfile.id).eq('game_id', gameId)
+      await supabase
+        .from('game_follows')
+        .delete()
+        .eq('user_id', userProfile.id)
+        .eq('game_id', gameId)
       setIsFollowingGame(false)
     } else {
-      await supabase.from('game_follows').insert({ user_id: userProfile.id, game_id: gameId })
+      await supabase
+        .from('game_follows')
+        .insert({ user_id: userProfile.id, game_id: gameId })
       setIsFollowingGame(true)
     }
   }
@@ -93,18 +143,23 @@ function GameDetailContent() {
   async function toggleFollowRecruit(recruitId: number) {
     if (!userProfile) return alert('请先登录！')
     if (followedRecruitIds.includes(recruitId)) {
-      await supabase.from('recruit_follows').delete().eq('user_id', userProfile.id).eq('recruit_id', recruitId)
-      setFollowedRecruitIds(followedRecruitIds.filter(id => id !== recruitId))
+      await supabase
+        .from('recruit_follows')
+        .delete()
+        .eq('user_id', userProfile.id)
+        .eq('recruit_id', recruitId)
+      setFollowedRecruitIds(followedRecruitIds.filter((id) => id !== recruitId))
     } else {
-      await supabase.from('recruit_follows').insert({ user_id: userProfile.id, recruit_id: recruitId })
+      await supabase
+        .from('recruit_follows')
+        .insert({ user_id: userProfile.id, recruit_id: recruitId })
       setFollowedRecruitIds([...followedRecruitIds, recruitId])
     }
   }
 
-  // 点赞：走 RPC，防重复 / 每日限次 / 双方加经验全在数据库里完成
   async function handleLike(recruitId: number, creatorId: number) {
     if (!userProfile) return alert('请先登录！')
-    if (likedIds.includes(recruitId)) return alert('你已经赞过这条通缉令啦！')
+    if (likedIds.includes(recruitId)) return alert('你已经赞过这条招募啦！')
     if (creatorId === userProfile.id) return alert('不能给自己点赞哦！')
 
     const { error } = await supabase.rpc('give_like', { p_recruit_id: recruitId })
@@ -115,7 +170,8 @@ function GameDetailContent() {
     }
 
     const today = new Date().toISOString().split('T')[0]
-    const currentLikeCount = userProfile.last_like_at === today ? (userProfile.daily_like_count || 0) : 0
+    const currentLikeCount =
+      userProfile.last_like_at === today ? userProfile.daily_like_count || 0 : 0
 
     setLikedIds([...likedIds, recruitId])
     setUserProfile({
@@ -140,7 +196,7 @@ function GameDetailContent() {
       online_time: data.onlineTime,
       personality: data.personality,
       platform: data.platform,
-      server_region: data.serverRegion
+      server_region: data.serverRegion,
     })
 
     if (error) {
@@ -152,167 +208,438 @@ function GameDetailContent() {
   }
 
   async function onForumSubmit(data: any) {
-    const { error } = await supabase.from('posts').insert({ game_id: gameId, user_id: userProfile.id, title: data.title, content: data.content })
-    if (!error) { setIsPostingForum(false); fetchPosts() }
+    if (!userProfile) {
+      alert('请先登录！')
+      return
+    }
+    const { error } = await supabase.from('posts').insert({
+      game_id: gameId,
+      user_id: userProfile.id,
+      title: data.title,
+      content: data.content,
+    })
+    if (!error) {
+      setIsPostingForum(false)
+      fetchPosts()
+    }
   }
 
   async function openComments(recruit: any) {
     setActiveRecruit(recruit)
     setCommentLoading(true)
-    const { data } = await supabase.from('comments').select(`*, user:users_profile(nickname, avatar_url)`).eq('recruit_id', recruit.id).order('created_at', { ascending: true })
+    const { data } = await supabase
+      .from('comments')
+      .select(`*, user:users_profile(nickname, avatar_url)`)
+      .eq('recruit_id', recruit.id)
+      .order('created_at', { ascending: true })
     if (data) setComments(data)
     setCommentLoading(false)
   }
 
   async function sendComment(content: string) {
-    await supabase.from('comments').insert({ recruit_id: activeRecruit.id, user_id: userProfile.id, content })
+    if (!userProfile) return alert('请先登录！')
+    await supabase
+      .from('comments')
+      .insert({ recruit_id: activeRecruit.id, user_id: userProfile.id, content })
     openComments(activeRecruit)
   }
 
   async function openPost(post: any) {
     setActivePost(post)
     setCommentLoading(true)
-    const { data } = await supabase.from('post_comments').select(`*, user:users_profile(nickname, avatar_url)`).eq('post_id', post.id).order('created_at', { ascending: true })
+    const { data } = await supabase
+      .from('post_comments')
+      .select(`*, user:users_profile(nickname, avatar_url)`)
+      .eq('post_id', post.id)
+      .order('created_at', { ascending: true })
     if (data) setPostComments(data)
     setCommentLoading(false)
   }
 
   async function sendPostComment(content: string) {
-    await supabase.from('post_comments').insert({ post_id: activePost.id, user_id: userProfile.id, content })
+    if (!userProfile) return alert('请先登录！')
+    await supabase
+      .from('post_comments')
+      .insert({ post_id: activePost.id, user_id: userProfile.id, content })
     openPost(activePost)
   }
 
-  if (loading) return <div className="min-h-screen bg-[#050B14] flex items-center justify-center text-cyan-500 animate-pulse">加载中...</div>
-  if (!game) return <div className="min-h-screen bg-[#050B14] flex items-center justify-center text-red-500">错误</div>
+  if (loading)
+    return (
+      <div className="min-h-screen bg-[#050B14] flex items-center justify-center text-[#5C6B7F] text-[13px]">
+        加载中…
+      </div>
+    )
+
+  if (!game)
+    return (
+      <div className="min-h-screen bg-[#050B14] flex items-center justify-center text-red-400 text-[13px]">
+        该节点不存在或已被删除
+      </div>
+    )
+
+  const showTabs = game.parent_id || subGames.length === 0
 
   return (
-    <div className="min-h-screen bg-[#050B14] text-gray-200 relative overflow-hidden pb-20">
-      <div className="relative z-10">
-        <Navbar />
+    <div className="min-h-screen bg-[#050B14] text-[#E8EFF7] pb-20">
+      <Navbar />
 
-        <div className="h-64 w-full bg-[#0A111F] relative flex items-center justify-center overflow-hidden border-b border-cyan-500/30">
-          {game.cover_url ? <img src={game.cover_url} className="absolute inset-0 w-full h-full object-cover opacity-30" /> : <div className="absolute inset-0 opacity-10 bg-[url('/logo.png')] bg-center bg-no-repeat bg-contain"></div>}
-          <div className="absolute inset-0 bg-gradient-to-t from-[#050B14] via-transparent to-black/50"></div>
-          <div className="relative z-10 w-full max-w-4xl px-6 flex flex-col items-center mt-6">
-            <h1 className="text-5xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 mb-2 tracking-widest text-center break-all drop-shadow-[0_0_15px_rgba(6,182,212,0.5)] font-orbitron">{game.name}</h1>
-            <p className="text-cyan-300 bg-cyan-950/50 border border-cyan-500/50 px-4 py-1.5 rounded-full text-sm backdrop-blur-md">👑 节点创建者: <UserName userId={game.creator_id} nickname={game.creator?.nickname || '未知'} className="font-bold text-white" /></p>
-          </div>
-          <button onClick={() => router.push('/')} className="absolute top-6 left-6 bg-black/60 border border-cyan-500/50 text-cyan-400 px-5 py-2 rounded-lg text-sm font-bold hover:bg-cyan-500/20 transition">← 断开连接</button>
-        </div>
+      <div className="relative h-44 md:h-56 w-full overflow-hidden border-b border-white/[0.06]">
+        {game.cover_url ? (
+          <img
+            src={game.cover_url}
+            alt={game.name}
+            className="absolute inset-0 w-full h-full object-cover opacity-25"
+          />
+        ) : (
+          <div className="absolute inset-0 bg-gradient-to-br from-[#0C1826] to-[#050B14]" />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-[#050B14] via-[#050B14]/40 to-transparent" />
 
-        <main className="max-w-4xl mx-auto px-4 md:px-6 -mt-10 relative z-20">
-          {!game.parent_id && (
-            <div className="bg-[#0A111F]/90 backdrop-blur-md border border-cyan-500/30 rounded-2xl p-6 shadow-[0_0_30px_rgba(6,182,212,0.2)] mb-8">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-black text-white font-orbitron flex items-center gap-2"><span className="text-cyan-400">📂</span> 游戏系列版本</h2>
-                <button onClick={() => setIsPostingRecruit(true)} className="bg-fuchsia-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-[0_0_15px_rgba(217,70,239,0.4)] hover:bg-fuchsia-500 transition-all">+ 创建子模块</button>
-              </div>
-              {subGames.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                  {subGames.map(sub => (
-                    <div key={sub.id} onClick={() => router.push(`/game?id=${sub.id}`)} className="bg-[#050B14] border border-gray-700 p-4 rounded-xl cursor-pointer hover:border-cyan-500 hover:bg-cyan-900/20 transition-all flex items-center gap-3">
-                      {sub.cover_url ? <img src={sub.cover_url} className="w-12 h-12 rounded object-cover" /> : <div className="w-12 h-12 rounded bg-gray-800 flex items-center justify-center text-xl">🎮</div>}
-                      <span className="font-bold text-white truncate">{sub.name}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8 text-gray-500 border border-dashed border-gray-700 rounded-xl">暂无子模块。你可以直接在下方大厅发布主游戏招募，或者点击右上角创建特定版本子模块。</div>
+        <button
+          onClick={() => router.push('/')}
+          className="absolute top-4 left-4 z-10 h-8 px-3 rounded-lg bg-black/50 border border-white/[0.12] text-[12px] text-[#94A3B8] hover:text-[#E8EFF7] hover:bg-black/70 transition-colors"
+        >
+          ← 返回大厅
+        </button>
+
+        <div className="absolute bottom-0 left-0 right-0 z-10">
+          <div className="max-w-5xl mx-auto px-4 md:px-6 pb-5">
+            <h1 className="text-2xl md:text-3xl font-semibold text-white break-words leading-tight">
+              {game.name}
+            </h1>
+            <div className="flex items-center gap-2 mt-2 text-[11.5px] text-[#5C6B7F]">
+              <span>创建者</span>
+              <UserName
+                userId={game.creator_id}
+                nickname={game.creator?.nickname || '未知'}
+                className="text-[#94A3B8] hover:text-cyan-400 transition-colors"
+              />
+              {!game.parent_id && subGames.length > 0 && (
+                <>
+                  <span className="text-[#2E3A48]">·</span>
+                  <span>{subGames.length} 个子模块</span>
+                </>
               )}
             </div>
-          )}
+          </div>
+        </div>
+      </div>
 
-          {(!game.parent_id && subGames.length > 0) ? null : (
-            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className="flex justify-center mb-8 gap-4">
-                <button onClick={() => setActiveTab('recruit')} className={`px-8 py-3.5 rounded-xl font-black font-orbitron tracking-widest transition-all ${activeTab === 'recruit' ? 'bg-blue-600 text-white shadow-[0_0_20px_rgba(37,99,235,0.5)]' : 'bg-[#0A111F] text-gray-400 border border-gray-700 hover:bg-gray-800'}`}>🚨 招募大厅</button>
-                <button onClick={() => setActiveTab('forum')} className={`px-8 py-3.5 rounded-xl font-black font-orbitron tracking-widest transition-all ${activeTab === 'forum' ? 'bg-fuchsia-600 text-white shadow-[0_0_20px_rgba(217,70,239,0.5)]' : 'bg-[#0A111F] text-gray-400 border border-gray-700 hover:bg-gray-800'}`}>💬 讨论区</button>
+      <main className="max-w-5xl mx-auto px-4 md:px-6 pt-6">
+
+        {!game.parent_id && (
+          <section className="mb-6">
+            <SectionTitle
+              count={subGames.length > 0 ? `${subGames.length} 个` : undefined}
+              action={
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setIsCreatingSub(true)}
+                >
+                  + 创建子模块
+                </Button>
+              }
+            >
+              游戏系列版本
+            </SectionTitle>
+
+            {subGames.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                {subGames.map((sub) => (
+                  <Card
+                    key={sub.id}
+                    padded={false}
+                    hover
+                    className="cursor-pointer overflow-hidden"
+                  >
+                    <button
+                      onClick={() => router.push(`/game?id=${sub.id}`)}
+                      className="w-full flex items-center gap-3 p-3 text-left"
+                    >
+                      <div className="w-11 h-11 rounded-lg bg-white/[0.04] border border-white/[0.06] overflow-hidden shrink-0 flex items-center justify-center">
+                        {sub.cover_url ? (
+                          <img
+                            src={sub.cover_url}
+                            alt={sub.name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <span className="text-[10px] text-[#4A5768]">无图</span>
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[13px] font-medium text-[#E8EFF7] truncate">
+                          {sub.name}
+                        </p>
+                        <p className="text-[10.5px] text-[#5C6B7F] mt-0.5">
+                          进入子模块 →
+                        </p>
+                      </div>
+                    </button>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                compact
+                title="还没有子模块"
+                description="如果有不同版本或服务器，可以创建子模块分开管理"
+              />
+            )}
+          </section>
+        )}
+
+        {showTabs && (
+          <>
+            <div className="flex items-center gap-2 mb-4">
+              <div className="inline-flex p-1 rounded-lg bg-white/[0.03] border border-white/[0.06]">
+                <button
+                  onClick={() => setActiveTab('recruit')}
+                  className={`h-8 px-4 rounded-md text-[12.5px] font-medium transition-colors ${
+                    activeTab === 'recruit'
+                      ? 'bg-white/[0.09] text-[#E8EFF7]'
+                      : 'text-[#5C6B7F] hover:text-[#94A3B8]'
+                  }`}
+                >
+                  招募大厅
+                </button>
+                <button
+                  onClick={() => setActiveTab('forum')}
+                  className={`h-8 px-4 rounded-md text-[12.5px] font-medium transition-colors ${
+                    activeTab === 'forum'
+                      ? 'bg-white/[0.09] text-[#E8EFF7]'
+                      : 'text-[#5C6B7F] hover:text-[#94A3B8]'
+                  }`}
+                >
+                  讨论区
+                </button>
               </div>
 
-              {activeTab === 'recruit' && (
-                <div>
-                  <div className="flex flex-wrap justify-center gap-4 mb-8">
-                    <button onClick={() => setIsPostingRecruit(true)} className="bg-blue-600 text-white px-8 py-3.5 rounded-xl font-black shadow-[0_0_20px_rgba(37,99,235,0.5)] hover:bg-blue-500 transition-all flex items-center gap-2 tracking-widest font-orbitron"><span className="text-xl">🚨</span> 发布招募通缉令</button>
-                    <button onClick={toggleFollowGame} className={`px-8 py-3.5 rounded-xl font-black shadow-lg transition-all flex items-center gap-2 tracking-widest font-orbitron border ${isFollowingGame ? 'bg-gray-800 text-gray-300 border-gray-600' : 'bg-transparent text-cyan-400 border-cyan-500 hover:bg-cyan-500/10'}`}>{isFollowingGame ? '✅ 已订阅游戏频道' : '🔔 订阅游戏频道'}</button>
-                  </div>
+              <div className="ml-auto flex items-center gap-2">
+                {activeTab === 'recruit' ? (
+                  <>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={toggleFollowGame}
+                    >
+                      {isFollowingGame ? '已订阅' : '订阅频道'}
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => setIsPostingRecruit(true)}
+                    >
+                      + 发布招募
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => setIsPostingForum(true)}
+                  >
+                    + 发布帖子
+                  </Button>
+                )}
+              </div>
+            </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
+            {activeTab === 'recruit' && (
+              <div>
+                {recruits.length === 0 ? (
+                  <EmptyState
+                    title="还没有人发布招募"
+                    description="第一个发布招募，让搭子找到你"
+                    action={
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => setIsPostingRecruit(true)}
+                      >
+                        发布招募
+                      </Button>
+                    }
+                  />
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                     {recruits.map((recruit, index) => {
-                      const isFirstBlood = index === recruits.length - 1;
-                      const isClosed = recruit.is_closed;
-                      const likeCount = recruit.likes?.length || 0;
-                      const isRecruitFollowed = followedRecruitIds.includes(recruit.id);
+                      const isFirstBlood = index === recruits.length - 1
+                      const isClosed = recruit.is_closed
+                      const likeCount = recruit.likes?.length || 0
+                      const isRecruitFollowed = followedRecruitIds.includes(recruit.id)
+                      const isLiked = likedIds.includes(recruit.id)
 
                       return (
-                        <div key={recruit.id} className={`relative bg-[#0A111F]/90 backdrop-blur-md rounded-xl border border-cyan-900/50 overflow-hidden flex flex-col transition-all duration-300 ${isClosed ? 'opacity-60 grayscale-[0.5]' : 'hover:border-cyan-400 hover:shadow-[0_0_20px_rgba(6,182,212,0.2)]'}`}>
-                          <div className="p-6 relative z-10 flex-1 flex flex-col">
-                            <div className="flex justify-between items-start mb-6 border-b border-cyan-500/20 pb-3">
-                              <h2 className="text-4xl font-black text-cyan-400 font-orbitron tracking-tighter drop-shadow-[0_0_8px_rgba(6,182,212,0.5)]">WANTED</h2>
-                              <span className="text-xs font-bold bg-blue-900/50 border border-blue-500/50 text-blue-300 px-2.5 py-1 rounded">悬赏招募</span>
-                            </div>
-                            <div className="space-y-3 font-medium text-gray-300 mb-8 text-[15px]">
-                              <p className="flex items-start gap-2"><span className="text-cyan-500 font-bold shrink-0">主玩内容：</span><span className="line-clamp-2 text-white">{recruit.play_content}</span></p>
-                              <p className="flex items-start gap-2"><span className="text-cyan-500 font-bold shrink-0">游戏平台：</span><span className="text-blue-300">{recruit.platform}</span></p>
-                              <p className="flex items-start gap-2"><span className="text-cyan-500 font-bold shrink-0">大区/区服：</span><span className="text-blue-300">{recruit.server_region}</span></p>
-                              <p className="flex items-start gap-2"><span className="text-cyan-500 font-bold shrink-0">在线时间：</span><span className="text-cyan-100">{recruit.online_time}</span></p>
-                            </div>
-                            <div className="flex items-center justify-between mt-auto pt-4 border-t border-cyan-500/20">
-                              <div className="flex items-center gap-3">
-                                <img src={recruit.creator?.avatar_url || '/logo.png'} className="w-11 h-11 rounded border border-fuchsia-500/50 object-cover bg-black" />
-                                <div>
-                                  <div className="flex items-center gap-2">
-                                    <UserName userId={recruit.creator?.id} nickname={recruit.creator?.nickname} className="text-[15px] font-bold text-white" />
-                                    {isFirstBlood && <span className="text-[9px] bg-red-500/20 text-red-400 border border-red-500/50 px-1.5 py-0.5 rounded shadow-[0_0_8px_rgba(239,68,68,0.5)]">🩸 首杀</span>}
-                                    <FollowUserButton targetId={recruit.creator?.id} currentUserId={userProfile?.id} />
-                                  </div>
-                                  <p className="text-xs text-fuchsia-400 font-mono">ID: {recruit.creator?.id}</p>
-                                </div>
+                        <Card
+                          key={recruit.id}
+                          padded={false}
+                          className={`flex flex-col overflow-hidden ${
+                            isClosed ? 'opacity-55' : ''
+                          }`}
+                        >
+                          <div className="p-4 flex-1">
+                            <div className="flex items-center justify-between mb-3">
+                              <span className="text-[9.5px] tracking-[0.2em] text-cyan-400/60 font-mono">
+                                WANTED
+                              </span>
+                              <div className="flex items-center gap-1.5">
+                                {isFirstBlood && <Badge tone="danger">首杀</Badge>}
+                                <Badge tone={isClosed ? 'neutral' : 'accent'}>
+                                  {isClosed ? '已结案' : '招募中'}
+                                </Badge>
                               </div>
-                              <button disabled={isClosed} onClick={() => handleLike(recruit.id, recruit.creator.id)} className={`px-3 py-1.5 rounded text-xs font-bold border ${likedIds.includes(recruit.id) ? 'bg-red-900/40 text-red-400 border-red-500/50' : 'bg-transparent text-gray-400 border-gray-600 hover:bg-red-500/20'}`}>
-                                {likedIds.includes(recruit.id) ? `❤️ 已赞 (${likeCount})` : `🤍 点赞 (${likeCount})`}
-                              </button>
+                            </div>
+
+                            <p className="text-[14px] leading-relaxed text-[#E8EFF7] line-clamp-2 mb-3.5">
+                              {recruit.play_content}
+                            </p>
+
+                            <div className="space-y-1.5 text-[11.5px]">
+                              <div className="flex gap-2">
+                                <span className="w-[52px] shrink-0 text-[#5C6B7F]">平台</span>
+                                <span className="text-[#94A3B8] truncate">
+                                  {recruit.platform || '不限'}
+                                </span>
+                              </div>
+                              <div className="flex gap-2">
+                                <span className="w-[52px] shrink-0 text-[#5C6B7F]">区服</span>
+                                <span className="text-[#94A3B8] truncate">
+                                  {recruit.server_region || '不限'}
+                                </span>
+                              </div>
+                              <div className="flex gap-2">
+                                <span className="w-[52px] shrink-0 text-[#5C6B7F]">在线</span>
+                                <span className="text-[#94A3B8] truncate">
+                                  {recruit.online_time || '未填写'}
+                                </span>
+                              </div>
+                              {recruit.personality && (
+                                <div className="flex gap-2">
+                                  <span className="w-[52px] shrink-0 text-[#5C6B7F]">要求</span>
+                                  <span className="text-[#94A3B8] line-clamp-1">
+                                    {recruit.personality}
+                                  </span>
+                                </div>
+                              )}
                             </div>
                           </div>
-                          <div className="flex border-t border-blue-500/30 bg-[#050B14]/80 divide-x divide-blue-500/30">
-                            <button onClick={() => openComments(recruit)} className="flex-1 py-3.5 text-cyan-400 text-sm font-bold hover:bg-cyan-500/10 transition">💬 留言</button>
-                            <button onClick={() => toggleFollowRecruit(recruit.id)} className={`flex-1 py-3.5 text-sm font-bold transition ${isRecruitFollowed ? 'text-gray-500' : 'text-yellow-400 hover:bg-yellow-500/10'}`}>
-                              {isRecruitFollowed ? '✅ 已关注' : '🔔 关注'}
+
+                          <div className="px-4 py-3 border-t border-white/[0.06] flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <img
+                                src={recruit.creator?.avatar_url || '/logo.png'}
+                                alt={recruit.creator?.nickname}
+                                className="w-7 h-7 rounded-full object-cover bg-black shrink-0"
+                              />
+                              <UserName
+                                userId={recruit.creator?.id}
+                                nickname={recruit.creator?.nickname}
+                                className="text-[12px] text-[#94A3B8] truncate hover:text-cyan-400 transition-colors"
+                              />
+                              <FollowUserButton
+                                targetId={recruit.creator?.id}
+                                currentUserId={userProfile?.id}
+                              />
+                            </div>
+
+                            <button
+                              disabled={isClosed}
+                              onClick={() => handleLike(recruit.id, recruit.creator.id)}
+                              className={`h-7 px-2.5 rounded-md border text-[11px] font-medium transition-colors shrink-0 ${
+                                isLiked
+                                  ? 'bg-red-500/12 text-red-400 border-red-500/25'
+                                  : 'bg-transparent text-[#5C6B7F] border-white/[0.08] hover:text-red-400 hover:border-red-500/25'
+                              }`}
+                            >
+                              {isLiked ? '已赞' : '点赞'} {likeCount}
                             </button>
                           </div>
-                        </div>
+
+                          <div className="flex border-t border-white/[0.06] divide-x divide-white/[0.06]">
+                            <button
+                              onClick={() => openComments(recruit)}
+                              className="flex-1 py-2.5 text-[12px] text-[#94A3B8] hover:bg-white/[0.04] hover:text-[#E8EFF7] transition-colors"
+                            >
+                              留言
+                            </button>
+                            <button
+                              onClick={() => toggleFollowRecruit(recruit.id)}
+                              className={`flex-1 py-2.5 text-[12px] transition-colors hover:bg-white/[0.04] ${
+                                isRecruitFollowed
+                                  ? 'text-[#4A5768]'
+                                  : 'text-[#94A3B8] hover:text-[#E8EFF7]'
+                              }`}
+                            >
+                              {isRecruitFollowed ? '已关注' : '关注'}
+                            </button>
+                          </div>
+                        </Card>
                       )
                     })}
                   </div>
-                </div>
-              )}
+                )}
+              </div>
+            )}
 
-              {activeTab === 'forum' && (
-                <div>
-                  <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-2xl font-black text-white font-orbitron">战术讨论区</h2>
-                    <button onClick={() => setIsPostingForum(true)} className="bg-fuchsia-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-fuchsia-500 transition-all">+ 发布新帖</button>
-                  </div>
-                  <div className="space-y-4">
-                    {posts.map(post => (
-                      <div key={post.id} onClick={() => openPost(post)} className="bg-[#0A111F]/90 border border-gray-800 p-5 rounded-2xl hover:border-fuchsia-500/50 transition cursor-pointer flex gap-4">
-                        <img src={post.user?.avatar_url || '/logo.png'} className="w-10 h-10 rounded-full border border-gray-600 bg-black mt-1" />
-                        <div className="flex-1 min-w-0">
-                          <h3 className="text-lg font-bold text-white mb-2">{post.title}</h3>
-                          <p className="text-sm text-gray-400 line-clamp-2 mb-3">{post.content}</p>
-                          <div className="flex items-center gap-4 text-xs text-gray-500 font-mono">
-                            <UserName userId={post.user?.id} nickname={post.user?.nickname} />
-                            <FollowUserButton targetId={post.user?.id} currentUserId={userProfile?.id} />
+            {activeTab === 'forum' && (
+              <div>
+                {posts.length === 0 ? (
+                  <EmptyState
+                    title="讨论区还很安静"
+                    description="发第一帖子，聊聊这个游戏"
+                    action={
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => setIsPostingForum(true)}
+                      >
+                        发布帖子
+                      </Button>
+                    }
+                  />
+                ) : (
+                  <div className="space-y-2.5">
+                    {posts.map((post) => (
+                      <Card key={post.id} padded={false} hover>
+                        <button
+                          onClick={() => openPost(post)}
+                          className="w-full flex gap-3 p-4 text-left"
+                        >
+                          <img
+                            src={post.user?.avatar_url || '/logo.png'}
+                            alt={post.user?.nickname}
+                            className="w-8 h-8 rounded-full object-cover bg-black shrink-0"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <h3 className="text-[14px] font-medium text-[#E8EFF7] mb-1.5 truncate">
+                              {post.title}
+                            </h3>
+                            <p className="text-[12.5px] text-[#5C6B7F] line-clamp-2 leading-relaxed mb-2">
+                              {post.content}
+                            </p>
+                            <div className="flex items-center gap-2 text-[11px] text-[#4A5768]">
+                              <span className="truncate">
+                                {post.user?.nickname || '未知玩家'}
+                              </span>
+                              <span className="text-[#2E3A48]">·</span>
+                              <span className="shrink-0">
+                                {new Date(post.created_at).toLocaleDateString('zh-CN')}
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                      </div>
+                        </button>
+                      </Card>
                     ))}
                   </div>
-                </div>
-              )}
-            </div>
-          )}
-        </main>
-      </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </main>
 
       <ModalPostRecruit
         isOpen={isPostingRecruit}
@@ -338,13 +665,38 @@ function GameDetailContent() {
         onClose={() => setActivePost(null)}
         onSend={sendPostComment}
       />
+      <ModalCreateGame
+        isOpen={isCreatingSub}
+        onClose={() => setIsCreatingSub(false)}
+        onSuccess={() => {
+          if (gameId) {
+            supabase
+              .from('games')
+              .select(`*`)
+              .eq('parent_id', gameId)
+              .order('created_at', { ascending: false })
+              .then(({ data }) => {
+                if (data) setSubGames(data)
+              })
+          }
+        }}
+        currentUserId={userProfile?.id}
+        defaultParentId={game.id}
+        lockParent
+      />
     </div>
   )
 }
 
 export default function GameDetailPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#050B14] flex items-center justify-center text-cyan-500 animate-pulse">加载中...</div>}>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#050B14] flex items-center justify-center text-[#5C6B7F] text-[13px]">
+          加载中…
+        </div>
+      }
+    >
       <GameDetailContent />
     </Suspense>
   )

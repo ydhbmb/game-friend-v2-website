@@ -12,7 +12,7 @@ export default function Navbar() {
   const [userProfile, setUserProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
-  
+
   const [unreadNotif, setUnreadNotif] = useState(0)
   const [hasUnreadMsg, setHasUnreadMsg] = useState(false)
 
@@ -20,14 +20,14 @@ export default function Navbar() {
 
   useEffect(() => {
     fetchUser()
-    
+
     function handleClickOutside(event: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setIsMenuOpen(false)
       }
     }
-    document.addEventListener("mousedown", handleClickOutside)
-    return () => document.removeEventListener("mousedown", handleClickOutside)
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [pathname])
 
   useEffect(() => {
@@ -36,16 +36,22 @@ export default function Navbar() {
       fetchUnread()
       interval = setInterval(fetchUnread, 5000)
     }
-    return () => { if (interval) clearInterval(interval) }
+    return () => {
+      if (interval) clearInterval(interval)
+    }
   }, [userProfile, pathname])
 
   async function fetchUser() {
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
-      const { data } = await supabase.from('users_profile').select('*').eq('auth_id', user.id).single()
+      const { data } = await supabase
+        .from('users_profile')
+        .select('*')
+        .eq('auth_id', user.id)
+        .single()
       if (data) {
         if (data.banned_until && new Date(data.banned_until) > new Date()) {
-          alert('您已经被巡游天官发现您的违禁行为，禁止进入！')
+          alert('你的账号已被封禁，无法继续访问')
           await supabase.auth.signOut()
           window.location.href = '/login'
           return
@@ -58,10 +64,18 @@ export default function Navbar() {
 
   async function fetchUnread() {
     if (!userProfile) return
-    const { count: notifCount } = await supabase.from('notifications').select('*', { count: 'exact', head: true }).eq('user_id', userProfile.id).eq('is_read', false)
+    const { count: notifCount } = await supabase
+      .from('notifications')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userProfile.id)
+      .eq('is_read', false)
     setUnreadNotif(notifCount || 0)
 
-    const { count: msgCount } = await supabase.from('messages').select('*', { count: 'exact', head: true }).eq('receiver_id', userProfile.id).eq('is_read', false)
+    const { count: msgCount } = await supabase
+      .from('messages')
+      .select('*', { count: 'exact', head: true })
+      .eq('receiver_id', userProfile.id)
+      .eq('is_read', false)
     setHasUnreadMsg((msgCount || 0) > 0)
   }
 
@@ -73,126 +87,205 @@ export default function Navbar() {
   async function handleCheckIn() {
     if (!userProfile) return
     const today = new Date().toISOString().split('T')[0]
-    if (userProfile.last_checkin_at === today) return alert('今天已经签到过啦！')
-    const { error } = await supabase.from('users_profile').update({ experience: (userProfile.experience || 0) + 5, last_checkin_at: today }).eq('id', userProfile.id)
+    if (userProfile.last_checkin_at === today) return alert('今天已经签到过了')
+    const { error } = await supabase
+      .from('users_profile')
+      .update({
+        experience: (userProfile.experience || 0) + 5,
+        last_checkin_at: today,
+      })
+      .eq('id', userProfile.id)
     if (!error) {
-      alert('签到成功！获得 5 经验！')
-      fetchUser() 
+      alert('签到成功，获得 5 经验')
+      fetchUser()
     }
   }
 
   if (pathname === '/login' || pathname === '/register') return null
 
-  const levelInfo = userProfile ? calculateLevel(userProfile.experience || 0, userProfile.id) : null
-  const isAdmin = !!userProfile && (userProfile.role === 'admin' || userProfile.role === 'super_admin')
+  const levelInfo = userProfile
+    ? calculateLevel(userProfile.experience || 0, userProfile.id)
+    : null
+  const isAdmin =
+    !!userProfile && (userProfile.role === 'admin' || userProfile.role === 'super_admin')
+  const checkedIn =
+    !!userProfile && userProfile.last_checkin_at === new Date().toISOString().split('T')[0]
+
+  const navBtn = (active: boolean) =>
+    `relative h-8 px-2.5 rounded-md text-[12px] font-medium transition-colors flex items-center ${
+      active
+        ? 'bg-white/[0.09] text-[#E8EFF7]'
+        : 'text-[#94A3B8] hover:bg-white/[0.05] hover:text-[#E8EFF7]'
+    }`
 
   return (
-    <nav className="bg-[#050B14]/80 backdrop-blur-md border-b border-cyan-900/50 px-4 md:px-6 py-3 flex items-center justify-between sticky top-0 z-50">
-      <div className="flex items-center gap-2 md:gap-4">
-        <Link href="/" className="flex items-center gap-2 group">
-          <img src="/logo.png" alt="僚机雷达" className="w-8 h-8 md:w-10 md:h-10 object-contain drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]" />
-          <span className="text-lg md:text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 hidden sm:block tracking-widest font-orbitron">僚机雷达</span>
-        </Link>
+    <nav className="sticky top-0 z-50 bg-[#050B14]/85 backdrop-blur-md border-b border-white/[0.06]">
+      <div className="max-w-[1400px] mx-auto px-4 md:px-6 h-[52px] flex items-center justify-between gap-3">
 
-        {userProfile && (
-          <button onClick={handleCheckIn} className="text-[10px] md:text-xs bg-gradient-to-r from-cyan-600 to-blue-600 text-white px-2 md:px-3 py-1.5 rounded-full font-bold hover:scale-105 transition">
-            📅 <span className="hidden sm:inline">签到领经验</span><span className="sm:hidden">签到</span>
-          </button>
-        )}
-      </div>
-      
-      <div className="flex items-center gap-2 md:gap-4">
-        {loading ? (
-          <span className="text-cyan-500 text-xs animate-pulse">加载中...</span>
-        ) : userProfile && levelInfo ? (
-          <div className="flex items-center gap-1 md:gap-3 relative">
+        <div className="flex items-center gap-2 md:gap-3 min-w-0">
+          <Link href="/" className="flex items-center gap-2 shrink-0">
+            <img
+              src="/logo.png"
+              alt="僚机雷达"
+              className="w-7 h-7 object-contain"
+            />
+            <span className="text-[13px] font-semibold text-white tracking-wide hidden sm:block">
+              僚机雷达
+            </span>
+          </Link>
 
-            {/* 动态广场 */}
-            <Link
-              href="/moments"
-              className={`text-xs font-bold px-2 py-1.5 rounded-lg border transition ${
-                pathname === '/moments'
-                  ? 'bg-fuchsia-600 text-white border-fuchsia-500'
-                  : 'text-fuchsia-400 border-fuchsia-500/30 hover:bg-fuchsia-500/20'
+          {userProfile && (
+            <button
+              onClick={handleCheckIn}
+              disabled={checkedIn}
+              className={`h-7 px-2.5 rounded-md text-[11.5px] font-medium border transition-colors shrink-0 ${
+                checkedIn
+                  ? 'text-[#4A5768] border-white/[0.06] cursor-default'
+                  : 'text-cyan-400 border-cyan-500/30 hover:bg-cyan-500/10'
               }`}
             >
-              <span className="hidden md:inline">广场</span><span className="md:hidden">🌐</span>
-            </Link>
-
-            {/* 管理员专属快捷入口 */}
-            {isAdmin && (
-              <Link
-                href="/admin"
-                className={`text-xs font-bold px-2 py-1.5 rounded-lg border transition ${
-                  pathname === '/admin'
-                    ? 'bg-red-600 text-white border-red-500'
-                    : 'text-red-400 border-red-500/30 hover:bg-red-500/20'
-                }`}
-              >
-                <span className="hidden md:inline">后台</span><span className="md:hidden">🛡️</span>
-              </Link>
-            )}
-
-            <button 
-              onClick={() => window.dispatchEvent(new Event('openChatWidget'))}
-              className="relative text-xs font-bold px-2 py-1.5 rounded-lg text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/20"
-            >
-              <span className="hidden md:inline">消息</span><span className="md:hidden">✉️</span>
-              {hasUnreadMsg && <span className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-red-500 rounded-full border-2 border-[#050B14] animate-pulse"></span>}
+              {checkedIn ? '已签到' : '签到'}
             </button>
-            
-            <Link href="/notifications" className="relative text-xs font-bold px-2 py-1.5 rounded-lg text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/20">
-              <span className="hidden md:inline">通知</span><span className="md:hidden">🔔</span>
-              {unreadNotif > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[9px] font-bold px-1.5 rounded-full border-2 border-[#050B14]">
-                  {unreadNotif > 99 ? '99+' : unreadNotif}
-                </span>
-              )}
-            </Link>
+          )}
+        </div>
 
-            <div className="relative ml-1 md:ml-2 pl-2 md:pl-4 border-l border-gray-700" ref={menuRef}>
-              <div className="flex items-center gap-2 cursor-pointer select-none" onClick={() => setIsMenuOpen(!isMenuOpen)}>
-                <img src={userProfile.avatar_url || '/logo.png'} className="w-8 h-8 rounded-full object-cover border border-cyan-500 shadow-[0_0_10px_rgba(6,182,212,0.5)]" />
-                <div className="hidden lg:flex flex-col">
-                  {/* 称号展示 */}
-                  {userProfile.equipped_title && (
-                    <span className="text-[10px] font-black text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-400 to-cyan-400 border border-fuchsia-500/30 px-1.5 rounded w-max shadow-[0_0_8px_rgba(217,70,239,0.3)]">
-                      {userProfile.equipped_title}
-                    </span>
-                  )}
-                  <div className="flex items-center gap-1">
-                    <span className="text-sm font-bold text-gray-200">{userProfile.nickname}</span>
-                    <span className="text-[10px] bg-cyan-900/50 text-cyan-300 px-1.5 py-0.5 rounded border border-cyan-500/30">Lv.{levelInfo.level}</span>
-                  </div>
-                  <span className="text-[10px] text-blue-400 font-bold">{levelInfo.icon} {levelInfo.name}</span>
-                </div>
-              </div>
-              
-              {isMenuOpen && (
-                <div className="absolute top-full right-0 mt-2 w-40 bg-[#0A111F] border border-cyan-500/30 rounded-xl shadow-xl py-2">
-                  <div className="lg:hidden px-4 py-2 border-b border-gray-700 mb-1">
-                    {userProfile.equipped_title && <p className="text-[10px] text-fuchsia-400 font-bold mb-1">{userProfile.equipped_title}</p>}
-                    <p className="text-xs text-white font-bold">{userProfile.nickname}</p>
-                    <p className="text-[10px] text-cyan-400">Lv.{levelInfo.level} {levelInfo.name}</p>
-                  </div>
-                  <Link href="/gacha" onClick={() => setIsMenuOpen(false)} className="block px-4 py-2 text-sm text-yellow-400 font-bold hover:bg-yellow-500/20">🎰 僚机盲盒</Link>
-                  <Link href="/moments" onClick={() => setIsMenuOpen(false)} className="block px-4 py-2 text-sm text-fuchsia-400 font-bold hover:bg-fuchsia-500/20">🌐 动态广场</Link>
-                  {isAdmin && (
-                    <Link href="/admin" onClick={() => setIsMenuOpen(false)} className="block px-4 py-2 text-sm text-red-400 font-bold hover:bg-red-500/20">🛡️ 神权控制台</Link>
-                  )}
-                  <Link href={`/profile?id=${userProfile.id}`} onClick={() => setIsMenuOpen(false)} className="block px-4 py-2 text-sm text-gray-300 hover:bg-cyan-500/20">个人主页</Link>
-                  <Link href="/following" onClick={() => setIsMenuOpen(false)} className="block px-4 py-2 text-sm text-gray-300 hover:bg-cyan-500/20">我的关注</Link>
-                  <Link href="/user-center" onClick={() => setIsMenuOpen(false)} className="block px-4 py-2 text-sm text-gray-300 hover:bg-cyan-500/20">用户中心</Link>
-                  <button onClick={handleLogout} className="block w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-red-500/20">退出登录</button>
-                </div>
+        <div className="flex items-center gap-1 md:gap-1.5 shrink-0">
+          {loading ? (
+            <span className="text-[11.5px] text-[#4A5768]">加载中…</span>
+          ) : userProfile && levelInfo ? (
+            <>
+              <Link href="/moments" className={`${navBtn(pathname === '/moments')} hidden sm:flex`}>
+                广场
+              </Link>
+
+              <Link href="/teams" className={`${navBtn(pathname === '/teams')} hidden sm:flex`}>
+                战队
+              </Link>
+
+              {isAdmin && (
+                <Link href="/admin" className={`${navBtn(pathname === '/admin')} hidden sm:flex`}>
+                  后台
+                </Link>
               )}
-            </div>
-          </div>
-        ) : (
-          <a href="/login" className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-4 py-1.5 md:px-6 md:py-2 rounded-lg font-bold text-sm shadow-[0_0_15px_rgba(6,182,212,0.4)]">
-            登录
-          </a>
-        )}
+
+              <button
+                onClick={() => window.dispatchEvent(new Event('openChatWidget'))}
+                className={navBtn(false)}
+                aria-label="消息"
+              >
+                消息
+                {hasUnreadMsg && (
+                  <span className="absolute top-1.5 right-1 w-1.5 h-1.5 rounded-full bg-red-500" />
+                )}
+              </button>
+
+              <Link href="/notifications" className={navBtn(pathname === '/notifications')}>
+                通知
+                {unreadNotif > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[15px] h-[15px] px-1 rounded-full bg-red-500 text-white text-[9px] font-medium flex items-center justify-center tabular-nums">
+                    {unreadNotif > 99 ? '99+' : unreadNotif}
+                  </span>
+                )}
+              </Link>
+
+              <div className="relative ml-1 pl-2 border-l border-white/[0.06]" ref={menuRef}>
+                <button
+                  onClick={() => setIsMenuOpen(!isMenuOpen)}
+                  className="flex items-center gap-2 h-8 rounded-md hover:bg-white/[0.05] px-1 transition-colors"
+                >
+                  <img
+                    src={userProfile.avatar_url || '/logo.png'}
+                    alt={userProfile.nickname}
+                    className="w-7 h-7 rounded-full object-cover bg-black border border-white/[0.08]"
+                  />
+                  <div className="hidden lg:flex flex-col items-start leading-tight">
+                    <span className="text-[12px] font-medium text-[#E8EFF7] max-w-[90px] truncate">
+                      {userProfile.nickname}
+                    </span>
+                    <span className="text-[10px] text-[#5C6B7F] tabular-nums">
+                      Lv.{levelInfo.level} {levelInfo.name}
+                    </span>
+                  </div>
+                </button>
+
+                {isMenuOpen && (
+                  <div className="absolute top-full right-0 mt-1.5 w-44 rounded-lg bg-[#0A111F] border border-white/[0.08] shadow-[0_10px_25px_rgba(0,0,0,0.5)] py-1 overflow-hidden">
+                    <div className="lg:hidden px-3 py-2 border-b border-white/[0.06] mb-1">
+                      <p className="text-[12px] font-medium text-[#E8EFF7] truncate">
+                        {userProfile.nickname}
+                      </p>
+                      <p className="text-[10px] text-[#5C6B7F] mt-0.5 tabular-nums">
+                        Lv.{levelInfo.level} {levelInfo.name}
+                      </p>
+                    </div>
+
+                    <Link
+                      href={`/profile?id=${userProfile.id}`}
+                      onClick={() => setIsMenuOpen(false)}
+                      className="block px-3 h-8 leading-8 text-[12.5px] text-[#94A3B8] hover:bg-white/[0.05] hover:text-[#E8EFF7] transition-colors"
+                    >
+                      个人主页
+                    </Link>
+                    <Link
+                      href="/following"
+                      onClick={() => setIsMenuOpen(false)}
+                      className="block px-3 h-8 leading-8 text-[12.5px] text-[#94A3B8] hover:bg-white/[0.05] hover:text-[#E8EFF7] transition-colors"
+                    >
+                      我的关注
+                    </Link>
+                    <Link
+                      href="/teams"
+                      onClick={() => setIsMenuOpen(false)}
+                      className="block px-3 h-8 leading-8 text-[12.5px] text-[#94A3B8] hover:bg-white/[0.05] hover:text-[#E8EFF7] transition-colors"
+                    >
+                      战队
+                    </Link>
+                    <Link
+                      href="/gacha"
+                      onClick={() => setIsMenuOpen(false)}
+                      className="block px-3 h-8 leading-8 text-[12.5px] text-[#94A3B8] hover:bg-white/[0.05] hover:text-[#E8EFF7] transition-colors"
+                    >
+                      僚机盲盒
+                    </Link>
+                    <Link
+                      href="/user-center"
+                      onClick={() => setIsMenuOpen(false)}
+                      className="block px-3 h-8 leading-8 text-[12.5px] text-[#94A3B8] hover:bg-white/[0.05] hover:text-[#E8EFF7] transition-colors"
+                    >
+                      用户中心
+                    </Link>
+
+                    {isAdmin && (
+                      <Link
+                        href="/admin"
+                        onClick={() => setIsMenuOpen(false)}
+                        className="block px-3 h-8 leading-8 text-[12.5px] text-red-400 hover:bg-red-500/10 transition-colors"
+                      >
+                        神权控制台
+                      </Link>
+                    )}
+
+                    <div className="border-t border-white/[0.06] mt-1 pt-1">
+                      <button
+                        onClick={handleLogout}
+                        className="block w-full text-left px-3 h-8 text-[12.5px] text-[#4A5768] hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                      >
+                        退出登录
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <Link
+              href="/login"
+              className="h-8 px-3.5 rounded-lg bg-cyan-600 text-white text-[12.5px] font-medium hover:bg-cyan-500 transition-colors inline-flex items-center"
+            >
+              登录
+            </Link>
+          )}
+        </div>
       </div>
     </nav>
   )

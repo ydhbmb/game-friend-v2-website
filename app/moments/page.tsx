@@ -3,6 +3,10 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import Navbar from '@/components/Navbar'
+import Card from '@/components/ui/Card'
+import Button from '@/components/ui/Button'
+import EmptyState from '@/components/ui/EmptyState'
+import SectionTitle from '@/components/ui/SectionTitle'
 
 type Moment = {
   id: number
@@ -53,9 +57,11 @@ export default function MomentsPage() {
   async function fetchMoments() {
     const { data, error } = await supabase
       .from('moments')
-      .select(`id, content, created_at, user_id,
-               user:users_profile(id, nickname, avatar_url),
-               moment_likes(user_id)`)
+      .select(
+        `id, content, created_at, user_id,
+         user:users_profile(id, nickname, avatar_url),
+         moment_likes(user_id)`
+      )
       .order('created_at', { ascending: false })
       .limit(50)
 
@@ -90,17 +96,16 @@ export default function MomentsPage() {
   }
 
   async function toggleLike(moment: Moment) {
-    if (!userProfile) return alert('请先登录！')
-    const liked = moment.moment_likes.some(l => l.user_id === userProfile.id)
+    if (!userProfile) return alert('请先登录')
+    const liked = moment.moment_likes.some((l) => l.user_id === userProfile.id)
 
-    // 先动界面，点下去立即有反馈
-    setMoments(prev =>
-      prev.map(m =>
+    setMoments((prev) =>
+      prev.map((m) =>
         m.id === moment.id
           ? {
               ...m,
               moment_likes: liked
-                ? m.moment_likes.filter(l => l.user_id !== userProfile.id)
+                ? m.moment_likes.filter((l) => l.user_id !== userProfile.id)
                 : [...m.moment_likes, { user_id: userProfile.id }],
             }
           : m
@@ -137,142 +142,155 @@ export default function MomentsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#050B14] flex items-center justify-center text-cyan-500 animate-pulse">
-        正在接入频道...
+      <div className="min-h-screen bg-[#050B14] flex items-center justify-center text-[#5C6B7F] text-[13px]">
+        加载中…
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-[#050B14] text-gray-200 relative overflow-hidden pb-20">
-      <div className="relative z-10">
-        <Navbar />
+    <div className="min-h-screen bg-[#050B14] text-[#E8EFF7] pb-20">
+      <Navbar />
 
-        <main className="max-w-2xl mx-auto px-4 md:px-6 pt-8">
+      <main className="max-w-2xl mx-auto px-4 md:px-6 pt-6 md:pt-8">
 
-          <div className="mb-8">
-            <h1 className="text-3xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-fuchsia-500 font-orbitron tracking-widest">
-              动态广场
-            </h1>
-            <p className="text-xs text-gray-500 mt-2 font-mono">PUBLIC CHANNEL · 说说你现在在打什么</p>
-          </div>
+        <div className="mb-4">
+          <h1 className="text-xl font-semibold text-white">动态广场</h1>
+          <p className="text-[11.5px] text-[#5C6B7F] mt-1">
+            说说你现在在打什么
+          </p>
+        </div>
 
-          {/* 发布框 */}
-          <div className="bg-[#0A111F]/90 backdrop-blur-md border border-cyan-500/30 rounded-2xl p-5 mb-8 shadow-[0_0_25px_rgba(6,182,212,0.12)]">
-            {userProfile ? (
-              <>
-                <div className="flex gap-3">
-                  <img
-                    src={userProfile.avatar_url || '/logo.png'}
-                    className="w-11 h-11 rounded-full border border-cyan-500/40 object-cover bg-black shrink-0"
-                  />
-                  <textarea
-                    className="flex-1 bg-[#050B14] border border-cyan-900/50 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-500 h-24 resize-none text-sm"
-                    placeholder="今天想找什么搭子？或者就想吐槽两句..."
-                    maxLength={200}
-                    value={content}
-                    onChange={e => setContent(e.target.value)}
-                  />
-                </div>
-                <div className="flex items-center justify-between mt-3">
-                  <span className={`text-xs font-mono ${content.length > 180 ? 'text-fuchsia-400' : 'text-gray-600'}`}>
-                    {content.length} / 200
-                  </span>
-                  <button
-                    onClick={handlePost}
-                    disabled={posting || !content.trim()}
-                    className="bg-cyan-600 text-white px-6 py-2 rounded-xl text-sm font-bold shadow-[0_0_15px_rgba(6,182,212,0.35)] hover:bg-cyan-500 disabled:opacity-40 disabled:shadow-none transition-all"
-                  >
-                    {posting ? '发送中...' : '发布动态'}
-                  </button>
-                </div>
-              </>
-            ) : (
-              <div className="text-center py-4">
-                <p className="text-sm text-gray-400 mb-3">登录后才能发布动态</p>
-                <a href="/login" className="inline-block bg-cyan-600 text-white px-6 py-2 rounded-xl text-sm font-bold hover:bg-cyan-500 transition">
-                  去登录
-                </a>
+        <Card className="mb-4">
+          {userProfile ? (
+            <>
+              <div className="flex gap-3">
+                <img
+                  src={userProfile.avatar_url || '/logo.png'}
+                  alt={userProfile.nickname}
+                  className="w-9 h-9 rounded-full object-cover bg-black border border-white/[0.08] shrink-0"
+                />
+                <textarea
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  maxLength={200}
+                  placeholder="今天想找什么搭子？或者就想吐槽两句…"
+                  className="flex-1 min-h-[80px] rounded-lg bg-white/[0.03] border border-white/[0.08] px-3 py-2.5 text-[13px] text-[#E8EFF7] placeholder-[#4A5768] outline-none focus:border-cyan-500/50 transition-colors resize-none"
+                />
               </div>
-            )}
-          </div>
 
-          {msg && (
-            <p className="text-sm text-center text-fuchsia-400 bg-fuchsia-900/20 border border-fuchsia-500/30 rounded-xl py-2 mb-6">
-              {msg}
-            </p>
-          )}
-
-          {/* 动态列表 */}
-          {moments.length === 0 ? (
-            <div className="text-center py-20 border border-dashed border-gray-700 rounded-2xl">
-              <p className="text-gray-500 text-sm">频道还很安静，发第一条动态破个冰。</p>
-            </div>
+              <div className="flex items-center justify-between mt-3">
+                <span
+                  className={`text-[10.5px] tabular-nums ${
+                    content.length > 180 ? 'text-amber-400' : 'text-[#4A5768]'
+                  }`}
+                >
+                  {content.length} / 200
+                </span>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handlePost}
+                  loading={posting}
+                  disabled={!content.trim()}
+                >
+                  发布
+                </Button>
+              </div>
+            </>
           ) : (
-            <div className="space-y-4">
-              {moments.map(m => {
-                const liked = !!userProfile && m.moment_likes.some(l => l.user_id === userProfile.id)
-                const isMine = !!userProfile && m.user_id === userProfile.id
-                return (
-                  <div
-                    key={m.id}
-                    className="bg-[#0A111F]/80 backdrop-blur-md border border-cyan-900/40 rounded-2xl p-5 hover:border-cyan-500/50 transition-all"
-                  >
-                    <div className="flex items-start gap-3">
+            <div className="text-center py-3">
+              <p className="text-[12px] text-[#5C6B7F] mb-3">登录后才能发布动态</p>
+              <a
+                href="/login"
+                className="inline-flex items-center h-8 px-4 rounded-lg bg-cyan-600 text-white text-[12px] font-medium hover:bg-cyan-500 transition-colors"
+              >
+                去登录
+              </a>
+            </div>
+          )}
+        </Card>
+
+        {msg && (
+          <p className="text-[11.5px] text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 mb-4">
+            {msg}
+          </p>
+        )}
+
+        <SectionTitle count={`${moments.length} 条`}>全部动态</SectionTitle>
+
+        {moments.length === 0 ? (
+          <EmptyState
+            title="频道还很安静"
+            description="发第一条动态，让搭子认识你"
+          />
+        ) : (
+          <div className="space-y-2.5">
+            {moments.map((m) => {
+              const liked =
+                !!userProfile && m.moment_likes.some((l) => l.user_id === userProfile.id)
+              const isMine = !!userProfile && m.user_id === userProfile.id
+
+              return (
+                <Card key={m.id} padded={false}>
+                  <div className="p-4">
+                    <div className="flex items-start gap-2.5">
                       <img
                         src={m.user?.avatar_url || '/logo.png'}
-                        className="w-10 h-10 rounded-full border border-fuchsia-500/40 object-cover bg-black shrink-0"
+                        alt={m.user?.nickname}
+                        className="w-8 h-8 rounded-full object-cover bg-black border border-white/[0.08] shrink-0"
                       />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="text-sm font-bold text-white truncate">
+                          <span className="text-[12.5px] text-[#E8EFF7] truncate">
                             {m.user?.nickname || '未知玩家'}
                           </span>
                           {m.user && (
                             <a
                               href={`/profile?id=${m.user.id}`}
-                              className="text-[10px] text-fuchsia-400 font-mono hover:underline"
+                              className="text-[10px] text-[#4A5768] font-mono hover:text-cyan-400 transition-colors shrink-0"
                             >
                               ID:{m.user.id}
                             </a>
                           )}
-                          <span className="text-[11px] text-gray-600 ml-auto shrink-0">
+                          <span className="text-[10.5px] text-[#4A5768] ml-auto shrink-0">
                             {timeAgo(m.created_at)}
                           </span>
                         </div>
-                        <p className="text-[15px] text-gray-200 whitespace-pre-wrap break-words leading-relaxed">
+                        <p className="text-[13.5px] text-[#E8EFF7] whitespace-pre-wrap break-words leading-relaxed">
                           {m.content}
                         </p>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-4 mt-4 pt-3 border-t border-cyan-500/10">
+                    <div className="flex items-center gap-3 mt-3 pt-3 border-t border-white/[0.06]">
                       <button
                         onClick={() => toggleLike(m)}
-                        className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border transition ${
+                        className={`h-7 px-2.5 rounded-md border text-[11px] font-medium transition-colors ${
                           liked
-                            ? 'bg-red-900/30 text-red-400 border-red-500/50'
-                            : 'bg-transparent text-gray-500 border-gray-700 hover:bg-red-500/10 hover:text-red-400'
+                            ? 'bg-red-500/12 text-red-400 border-red-500/25'
+                            : 'bg-transparent text-[#5C6B7F] border-white/[0.08] hover:text-red-400 hover:border-red-500/25'
                         }`}
                       >
-                        {liked ? '❤️' : '🤍'} {m.moment_likes.length}
+                        {liked ? '已赞' : '点赞'} {m.moment_likes.length}
                       </button>
+
                       {isMine && (
                         <button
                           onClick={() => handleDelete(m)}
-                          className="text-xs text-gray-600 hover:text-red-400 transition"
+                          className="text-[11px] text-[#4A5768] hover:text-red-400 transition-colors"
                         >
                           删除
                         </button>
                       )}
                     </div>
                   </div>
-                )
-              })}
-            </div>
-          )}
-        </main>
-      </div>
+                </Card>
+              )
+            })}
+          </div>
+        )}
+      </main>
     </div>
   )
 }

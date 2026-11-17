@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, Suspense } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Navbar from '@/components/Navbar'
+import Button from '@/components/ui/Button'
 
 function MessagesContent() {
   const router = useRouter()
@@ -16,7 +17,7 @@ function MessagesContent() {
   const [messages, setMessages] = useState<any[]>([])
   const [newMsg, setNewMsg] = useState('')
   const [loading, setLoading] = useState(true)
-  
+
   const [blockedIds, setBlockedIds] = useState<number[]>([])
   const [isBlockedByMe, setIsBlockedByMe] = useState(false)
 
@@ -30,31 +31,55 @@ function MessagesContent() {
         router.push('/login')
         return
       }
-      const { data: profile } = await supabase.from('users_profile').select('*').eq('auth_id', user.id).single()
+
+      const { data: profile } = await supabase
+        .from('users_profile')
+        .select('*')
+        .eq('auth_id', user.id)
+        .single()
       setUserProfile(profile)
-      
+
       if (profile) {
-        const { data: following } = await supabase.from('follows').select('following_id').eq('follower_id', profile.id)
-        const { data: followers } = await supabase.from('follows').select('follower_id').eq('following_id', profile.id)
+        const { data: following } = await supabase
+          .from('follows')
+          .select('following_id')
+          .eq('follower_id', profile.id)
+        const { data: followers } = await supabase
+          .from('follows')
+          .select('follower_id')
+          .eq('following_id', profile.id)
 
         let contactIds: number[] = []
-        if (following) contactIds = [...contactIds, ...following.map(f => f.following_id)]
-        if (followers) contactIds = [...contactIds, ...followers.map(f => f.follower_id)]
-        contactIds = Array.from(new Set(contactIds)).filter(id => id !== profile.id)
+        if (following) contactIds = [...contactIds, ...following.map((f) => f.following_id)]
+        if (followers) contactIds = [...contactIds, ...followers.map((f) => f.follower_id)]
+        contactIds = Array.from(new Set(contactIds)).filter((id) => id !== profile.id)
 
         if (contactIds.length > 0) {
-          const { data: contactsData } = await supabase.from('users_profile').select('*').in('id', contactIds)
+          const { data: contactsData } = await supabase
+            .from('users_profile')
+            .select('*')
+            .in('id', contactIds)
           if (contactsData) setContacts(contactsData)
         }
 
-        const { data: blockedData } = await supabase.from('blocked_users').select('blocked_id').eq('blocker_id', profile.id)
-        if (blockedData) {
-          setBlockedIds(blockedData.map(b => b.blocked_id))
-        }
+        const { data: blockedData } = await supabase
+          .from('blocked_users')
+          .select('blocked_id')
+          .eq('blocker_id', profile.id)
+        if (blockedData) setBlockedIds(blockedData.map((b) => b.blocked_id))
 
         if (targetId) {
-          const { data: targetProfile } = await supabase.from('users_profile').select('*').eq('id', targetId).single()
-          if (targetProfile) selectContact(targetProfile)
+          const { data: targetProfile } = await supabase
+            .from('users_profile')
+            .select('*')
+            .eq('id', targetId)
+            .single()
+          if (targetProfile) {
+            setActiveContact(targetProfile)
+            setIsBlockedByMe(
+              (blockedData || []).some((b) => b.blocked_id === targetProfile.id)
+            )
+          }
         }
       }
       setLoading(false)
@@ -68,9 +93,7 @@ function MessagesContent() {
 
     if (currentId) {
       fetchMessages(currentId, false)
-      interval = setInterval(() => {
-        fetchMessages(currentId, true)
-      }, 3000)
+      interval = setInterval(() => fetchMessages(currentId, true), 3000)
     }
 
     return () => {
@@ -84,22 +107,33 @@ function MessagesContent() {
     const { data, error } = await supabase
       .from('messages')
       .select('*')
-      .or(`and(sender_id.eq.${userProfile.id},receiver_id.eq.${contactId}),and(sender_id.eq.${contactId},receiver_id.eq.${userProfile.id})`)
+      .or(
+        `and(sender_id.eq.${userProfile.id},receiver_id.eq.${contactId}),and(sender_id.eq.${contactId},receiver_id.eq.${userProfile.id})`
+      )
       .order('created_at', { ascending: true })
-    
+
     if (!error && data) {
       if (data.length !== prevMsgLength.current || !isSilent) {
         setMessages(data)
-        
         if (isSilent && data.length > prevMsgLength.current) {
-          setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
+          setTimeout(
+            () => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }),
+            100
+          )
         }
         prevMsgLength.current = data.length
 
-        // 🔥 核心：将对方发给我的未读消息标记为已读
-        const unreadFromContact = data.filter(m => m.sender_id === contactId && m.receiver_id === userProfile.id && !m.is_read)
-        if (unreadFromContact.length > 0) {
-          await supabase.from('messages').update({ is_read: true }).in('id', unreadFromContact.map(m => m.id))
+        const unread = data.filter(
+          (m) =>
+            m.sender_id === contactId &&
+            m.receiver_id === userProfile.id &&
+            !m.is_read
+        )
+        if (unread.length > 0) {
+          await supabase
+            .from('messages')
+            .update({ is_read: true })
+            .in('id', unread.map((m) => m.id))
         }
       }
     }
@@ -108,32 +142,36 @@ function MessagesContent() {
   function selectContact(contact: any) {
     setActiveContact(contact)
     setIsBlockedByMe(blockedIds.includes(contact.id))
-    prevMsgLength.current = 0 
+    prevMsgLength.current = 0
   }
 
   async function handleSend() {
     if (!newMsg.trim() || !activeContact || !userProfile || isBlockedByMe) return
     const content = newMsg
     setNewMsg('')
-    
-    const tempMsg = {
-      id: Date.now(),
-      sender_id: userProfile.id,
-      receiver_id: activeContact.id,
-      content: content,
-      created_at: new Date().toISOString(),
-      is_read: false
-    }
-    setMessages(prev => [...prev, tempMsg])
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: Date.now(),
+        sender_id: userProfile.id,
+        receiver_id: activeContact.id,
+        content,
+        created_at: new Date().toISOString(),
+        is_read: false,
+      },
+    ])
     setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
     prevMsgLength.current += 1
 
-    const { error } = await supabase.from('messages').insert({
-      sender_id: userProfile.id,
-      receiver_id: activeContact.id,
-      content: content
-    })
-    
+    const { error } = await supabase
+      .from('messages')
+      .insert({
+        sender_id: userProfile.id,
+        receiver_id: activeContact.id,
+        content,
+      })
+
     if (!error) {
       fetchMessages(activeContact.id, true)
     } else {
@@ -144,112 +182,173 @@ function MessagesContent() {
   async function toggleBlock() {
     if (!activeContact || !userProfile) return
     if (isBlockedByMe) {
-      await supabase.from('blocked_users').delete().eq('blocker_id', userProfile.id).eq('blocked_id', activeContact.id)
-      setBlockedIds(blockedIds.filter(id => id !== activeContact.id))
+      await supabase
+        .from('blocked_users')
+        .delete()
+        .eq('blocker_id', userProfile.id)
+        .eq('blocked_id', activeContact.id)
+      setBlockedIds(blockedIds.filter((id) => id !== activeContact.id))
       setIsBlockedByMe(false)
     } else {
-      await supabase.from('blocked_users').insert({ blocker_id: userProfile.id, blocked_id: activeContact.id })
+      await supabase
+        .from('blocked_users')
+        .insert({ blocker_id: userProfile.id, blocked_id: activeContact.id })
       setBlockedIds([...blockedIds, activeContact.id])
       setIsBlockedByMe(true)
     }
   }
 
-  if (loading && !activeContact) return <div className="min-h-screen bg-[#050B14] p-20 text-center text-cyan-500 animate-pulse">建立加密信道中...</div>
+  if (loading && !activeContact) {
+    return (
+      <div className="min-h-screen bg-[#050B14] flex items-center justify-center text-[#5C6B7F] text-[13px]">
+        加载中…
+      </div>
+    )
+  }
 
   return (
-    <div className="h-screen bg-[#050B14] flex flex-col relative overflow-hidden">
-      <div className="absolute top-[-10%] left-[-10%] w-[40vw] h-[40vw] bg-fuchsia-600/10 rounded-full blur-[120px] pointer-events-none"></div>
-      
-      <div className="relative z-10 flex flex-col h-full">
-        <Navbar />
+    <div className="h-screen bg-[#050B14] flex flex-col">
+      <Navbar />
 
-        <div className="flex-1 flex max-w-6xl w-full mx-auto shadow-[0_0_30px_rgba(0,0,0,0.8)] my-0 md:my-4 md:rounded-2xl overflow-hidden border border-gray-800 bg-[#0A111F]">
-          <div className={`w-full md:w-1/3 border-r border-gray-800 bg-[#050B14]/50 flex flex-col ${activeContact ? 'hidden md:flex' : 'flex'}`}>
-            <div className="p-4 border-b border-gray-800 bg-black/40">
-              <h2 className="font-bold text-cyan-400 tracking-wider font-orbitron">通讯录</h2>
-            </div>
-            <div className="flex-1 overflow-y-auto">
-              {contacts.length === 0 ? (
-                <p className="text-center text-gray-500 text-sm mt-10">暂未建立任何连接<br/>去大厅关注找搭子吧！</p>
-              ) : (
-                contacts.map(c => (
-                  <div 
-                    key={c.id} 
-                    onClick={() => selectContact(c)}
-                    className={`p-4 flex items-center gap-3 cursor-pointer transition-all border-l-4 ${activeContact?.id === c.id ? 'bg-cyan-900/20 border-cyan-500' : 'border-transparent hover:bg-gray-800/50'}`}
-                  >
-                    <div className="relative">
-                      <img src={c.avatar_url || '/logo.png'} className="w-12 h-12 rounded border border-gray-700 object-cover bg-black" />
-                    </div>
-                    <div>
-                      <p className="font-bold text-gray-200 text-sm">{c.nickname}</p>
-                      <p className="text-xs text-cyan-500/70 font-mono">ID: {c.id}</p>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
+      <div className="flex-1 flex max-w-5xl w-full mx-auto overflow-hidden md:rounded-xl md:my-4 border border-white/[0.06] bg-[#0A111F]/70">
+
+        <div
+          className={`w-full md:w-[220px] shrink-0 border-r border-white/[0.06] flex-col ${
+            activeContact ? 'hidden md:flex' : 'flex'
+          }`}
+        >
+          <div className="px-3.5 py-3 border-b border-white/[0.06]">
+            <h2 className="text-[12.5px] font-semibold">通讯录</h2>
           </div>
 
-          <div className={`flex-1 flex flex-col bg-[#0A111F] ${!activeContact ? 'hidden md:flex' : 'flex'}`}>
-            {activeContact ? (
-              <>
-                <div className="p-4 border-b border-gray-800 bg-black/40 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <button onClick={() => setActiveContact(null)} className="md:hidden text-cyan-500 font-bold mr-2">←</button>
-                    <h2 className="font-bold text-lg text-white">{activeContact.nickname}</h2>
-                    <span className="text-xs text-fuchsia-400 border border-fuchsia-500/30 px-2 py-0.5 rounded">ID: {activeContact.id}</span>
-                  </div>
-                  <button 
-                    onClick={toggleBlock}
-                    className={`text-xs px-3 py-1.5 rounded transition border ${isBlockedByMe ? 'bg-gray-800 text-gray-400 border-gray-700' : 'bg-red-900/20 text-red-400 border-red-500/30 hover:bg-red-900/40'}`}
-                  >
-                    {isBlockedByMe ? '解除拉黑' : '加入黑名单'}
-                  </button>
-                </div>
-                
-                <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
-                  {messages.map((m, index) => {
-                    const isMe = m.sender_id === userProfile.id
-                    return (
-                      <div key={m.id || index} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[80%] px-4 py-2.5 rounded-xl text-[15px] shadow-sm ${
-                          isMe ? 'bg-gradient-to-br from-cyan-600 to-blue-700 text-white rounded-tr-sm' : 'bg-gray-800 border border-gray-700 text-gray-200 rounded-tl-sm'
-                        }`}>
-                          {m.content}
-                        </div>
-                      </div>
-                    )
-                  })}
-                  <div ref={bottomRef} />
-                </div>
-
-                <div className="p-4 border-t border-gray-800 bg-black/40 flex gap-3">
-                  {isBlockedByMe ? (
-                    <div className="w-full text-center text-red-400 text-sm py-2 border border-red-500/30 bg-red-900/10 rounded-lg">
-                      你已将该用户拉黑，解除后可继续聊天。
-                    </div>
-                  ) : (
-                    <>
-                      <input 
-                        className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-white outline-none focus:border-cyan-500 transition-colors"
-                        placeholder="输入加密信息..."
-                        value={newMsg}
-                        onChange={(e) => setNewMsg(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                      />
-                      <button onClick={handleSend} className="bg-cyan-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-cyan-500 shadow-[0_0_10px_rgba(6,182,212,0.4)] transition-all">发送</button>
-                    </>
-                  )}
-                </div>
-              </>
+          <div className="flex-1 overflow-y-auto p-1.5">
+            {contacts.length === 0 ? (
+              <p className="text-[11px] text-[#4A5768] text-center mt-8 px-3 leading-relaxed">
+                还没有可以聊天的联系人
+                <br />
+                去大厅关注或发布招募吧
+              </p>
             ) : (
-              <div className="flex-1 flex items-center justify-center text-gray-600 flex-col">
-                <img src="/logo.png" className="w-24 h-24 opacity-10 mb-4 grayscale" />
-                <p className="tracking-widest text-sm font-orbitron">选择联系人开始聊天</p>
-              </div>
+              contacts.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => selectContact(c)}
+                  className={`w-full flex items-center gap-2.5 px-2 h-12 rounded-md transition-colors text-left ${
+                    activeContact?.id === c.id
+                      ? 'bg-white/[0.09]'
+                      : 'hover:bg-white/[0.04]'
+                  }`}
+                >
+                  <img
+                    src={c.avatar_url || '/logo.png'}
+                    alt={c.nickname}
+                    className="w-8 h-8 rounded-full object-cover bg-black border border-white/[0.08] shrink-0"
+                  />
+                  <div className="min-w-0">
+                    <p className="text-[12.5px] text-[#E8EFF7] truncate">
+                      {c.nickname}
+                    </p>
+                    <p className="text-[10px] text-[#4A5768] font-mono">
+                      ID:{c.id}
+                    </p>
+                  </div>
+                </button>
+              ))
             )}
           </div>
+        </div>
+
+        <div
+          className={`flex-1 flex-col min-w-0 ${
+            !activeContact ? 'hidden md:flex' : 'flex'
+          }`}
+        >
+          {activeContact ? (
+            <>
+              <div className="px-4 py-2.5 border-b border-white/[0.06] flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <button
+                    onClick={() => setActiveContact(null)}
+                    className="md:hidden text-[#5C6B7F] hover:text-[#E8EFF7] text-sm shrink-0"
+                  >
+                    ←
+                  </button>
+                  <span className="text-[13px] font-medium text-[#E8EFF7] truncate">
+                    {activeContact.nickname}
+                  </span>
+                  <span className="text-[10px] text-[#4A5768] font-mono shrink-0">
+                    ID:{activeContact.id}
+                  </span>
+                </div>
+
+                <button
+                  onClick={toggleBlock}
+                  className={`h-7 px-2.5 rounded-md border text-[11px] shrink-0 transition-colors ${
+                    isBlockedByMe
+                      ? 'bg-white/[0.05] text-[#94A3B8] border-white/[0.08] hover:bg-white/[0.09]'
+                      : 'bg-transparent text-[#4A5768] border-white/[0.06] hover:text-red-400 hover:border-red-500/30'
+                  }`}
+                >
+                  {isBlockedByMe ? '解除拉黑' : '拉黑'}
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {messages.length === 0 && (
+                  <p className="text-[11.5px] text-[#4A5768] text-center mt-10">
+                    还没有消息，说点什么吧
+                  </p>
+                )}
+
+                {messages.map((m, index) => {
+                  const isMe = m.sender_id === userProfile.id
+                  return (
+                    <div
+                      key={m.id || index}
+                      className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}
+                    >
+                      <div
+                        className={`max-w-[78%] px-3 py-2 rounded-lg text-[13px] leading-relaxed break-words ${
+                          isMe
+                            ? 'bg-cyan-600 text-white rounded-br-sm'
+                            : 'bg-white/[0.06] text-[#E8EFF7] rounded-bl-sm'
+                        }`}
+                      >
+                        {m.content}
+                      </div>
+                    </div>
+                  )
+                })}
+                <div ref={bottomRef} />
+              </div>
+
+              <div className="px-3 py-2.5 border-t border-white/[0.06]">
+                {isBlockedByMe ? (
+                  <p className="text-center text-[11.5px] text-[#4A5768] py-2">
+                    已拉黑该用户，解除后可继续聊天
+                  </p>
+                ) : (
+                  <div className="flex gap-2">
+                    <input
+                      value={newMsg}
+                      onChange={(e) => setNewMsg(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                      maxLength={500}
+                      placeholder="输入消息…"
+                      className="flex-1 h-10 rounded-lg bg-white/[0.03] border border-white/[0.08] px-3 text-[13px] text-[#E8EFF7] placeholder-[#4A5768] outline-none focus:border-cyan-500/50 transition-colors"
+                    />
+                    <Button variant="primary" onClick={handleSend} disabled={!newMsg.trim()}>
+                      发送
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="flex-1 flex items-center justify-center flex-col gap-2">
+              <p className="text-[12px] text-[#4A5768]">选择联系人开始聊天</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -258,7 +357,13 @@ function MessagesContent() {
 
 export default function MessagesPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#050B14] p-20 text-center text-cyan-500">加载中...</div>}>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#050B14] flex items-center justify-center text-[#5C6B7F] text-[13px]">
+          加载中…
+        </div>
+      }
+    >
       <MessagesContent />
     </Suspense>
   )

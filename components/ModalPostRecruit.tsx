@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Button from '@/components/ui/Button'
 
 interface Props {
   isOpen: boolean
@@ -18,16 +19,7 @@ export default function ModalPostRecruit({ isOpen, onClose, onSubmit }: Props) {
 
   if (!isOpen) return null
 
-  const handleSubmit = () => {
-    // 测试拦截
-    if (!playContent || !onlineTime || !platform || !serverRegion) {
-      return setMsg('请填写完整的主玩内容、在线时间、平台和区服')
-    }
-    
-    // 🔥 触发提交，把数据传回给主页面
-    onSubmit({ playContent, onlineTime, personality, platform, serverRegion })
-    
-    // 重置状态
+  function reset() {
     setPlayContent('')
     setOnlineTime('')
     setPersonality('')
@@ -36,27 +28,123 @@ export default function ModalPostRecruit({ isOpen, onClose, onSubmit }: Props) {
     setMsg('')
   }
 
+  function handleSubmit() {
+    if (
+      !playContent.trim() ||
+      !onlineTime.trim() ||
+      !platform.trim() ||
+      !serverRegion.trim()
+    ) {
+      return setMsg('请填写主玩内容、平台、区服和在线时间')
+    }
+    onSubmit({
+      playContent: playContent.trim(),
+      onlineTime: onlineTime.trim(),
+      personality: personality.trim(),
+      platform: platform.trim(),
+      serverRegion: serverRegion.trim(),
+    })
+    reset()
+  }
+
+  const inputCls =
+    'w-full h-10 rounded-lg bg-white/[0.03] border border-white/[0.08] px-3 text-[13px] text-[#E8EFF7] placeholder-[#4A5768] outline-none focus:border-cyan-500/50 transition-colors'
+
   return (
-    <div className="fixed inset-0 bg-[#050B14]/90 backdrop-blur-md flex items-center justify-center z-[100] p-4">
-      <div className="bg-[#0A111F] border border-cyan-500/50 rounded-2xl p-6 md:p-8 w-full max-w-md shadow-[0_0_30px_rgba(6,182,212,0.2)]">
-        <h3 className="text-xl md:text-2xl font-black mb-6 text-white text-center tracking-widest font-orbitron">发布赛博通缉令</h3>
-        
-        <input className="w-full bg-[#050B14] border border-cyan-900/50 rounded-lg px-4 py-2.5 mb-4 text-white outline-none focus:border-cyan-500" placeholder="主玩内容 (如：排位上分)" value={playContent} onChange={(e) => setPlayContent(e.target.value)} />
-        
-        <div className="grid grid-cols-2 gap-4 mb-4">
-          <input className="w-full bg-[#050B14] border border-cyan-900/50 rounded-lg px-4 py-2.5 text-white outline-none focus:border-cyan-500" placeholder="游戏平台 (如：Steam)" value={platform} onChange={(e) => setPlatform(e.target.value)} />
-          <input className="w-full bg-[#050B14] border border-cyan-900/50 rounded-lg px-4 py-2.5 text-white outline-none focus:border-cyan-500" placeholder="大区/区服 (如：亚服)" value={serverRegion} onChange={(e) => setServerRegion(e.target.value)} />
+    <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+      <div className="w-full max-w-md rounded-xl bg-[#0A111F] border border-white/[0.08] overflow-hidden">
+
+        <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-white/[0.06]">
+          <h3 className="text-[15px] font-semibold text-[#E8EFF7]">发布招募</h3>
+          <button
+            onClick={() => { reset(); onClose() }}
+            className="text-[#4A5768] hover:text-[#94A3B8] text-lg leading-none transition-colors"
+          >
+            ×
+          </button>
         </div>
-        
-        <input className="w-full bg-[#050B14] border border-cyan-900/50 rounded-lg px-4 py-2.5 mb-4 text-white outline-none focus:border-cyan-500" placeholder="在线时间 (如：每晚 8点)" value={onlineTime} onChange={(e) => setOnlineTime(e.target.value)} />
-        
-        <textarea className="w-full bg-[#050B14] border border-cyan-900/50 rounded-lg px-4 py-2.5 mb-4 text-white outline-none focus:border-cyan-500 h-24 resize-none" placeholder="战术要求 (选填)" value={personality} onChange={(e) => setPersonality(e.target.value)} />
-        
-        {msg && <p className="text-red-500 text-sm mb-4 text-center">{msg}</p>}
-        
-        <div className="flex gap-3 mt-6">
-          <button onClick={onClose} className="flex-1 bg-gray-800 text-gray-300 py-3 rounded-lg font-bold">取消</button>
-          <button onClick={handleSubmit} className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold shadow-[0_0_15px_rgba(37,99,235,0.4)]">确认发布</button>
+
+        <div className="px-5 py-4 space-y-3.5 max-h-[65vh] overflow-y-auto">
+          <div>
+            <label className="block text-[11px] text-[#5C6B7F] mb-1.5">
+              主玩内容 <span className="text-red-400/70">*</span>
+            </label>
+            <input
+              value={playContent}
+              onChange={(e) => setPlayContent(e.target.value)}
+              maxLength={60}
+              placeholder="如：排位上分、想找固定队友"
+              className={inputCls}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] text-[#5C6B7F] mb-1.5">
+                平台 <span className="text-red-400/70">*</span>
+              </label>
+              <input
+                value={platform}
+                onChange={(e) => setPlatform(e.target.value)}
+                maxLength={20}
+                placeholder="Steam / PS5"
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] text-[#5C6B7F] mb-1.5">
+                大区 / 区服 <span className="text-red-400/70">*</span>
+              </label>
+              <input
+                value={serverRegion}
+                onChange={(e) => setServerRegion(e.target.value)}
+                maxLength={20}
+                placeholder="亚服 / 华东"
+                className={inputCls}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[11px] text-[#5C6B7F] mb-1.5">
+              在线时间 <span className="text-red-400/70">*</span>
+            </label>
+            <input
+              value={onlineTime}
+              onChange={(e) => setOnlineTime(e.target.value)}
+              maxLength={40}
+              placeholder="如：每晚 20:00 - 23:00"
+              className={inputCls}
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] text-[#5C6B7F] mb-1.5">
+              补充要求 <span className="text-[#4A5768]">（可选）</span>
+            </label>
+            <textarea
+              value={personality}
+              onChange={(e) => setPersonality(e.target.value)}
+              maxLength={200}
+              placeholder="段位要求、语音、脾气偏好等"
+              className="w-full h-20 rounded-lg bg-white/[0.03] border border-white/[0.08] px-3 py-2.5 text-[13px] text-[#E8EFF7] placeholder-[#4A5768] outline-none focus:border-cyan-500/50 transition-colors resize-none"
+            />
+          </div>
+
+          {msg && (
+            <p className="text-[11.5px] text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+              {msg}
+            </p>
+          )}
+        </div>
+
+        <div className="px-5 pb-4 pt-1 flex gap-2">
+          <Button variant="ghost" full onClick={() => { reset(); onClose() }}>
+            取消
+          </Button>
+          <Button variant="primary" full onClick={handleSubmit}>
+            发布
+          </Button>
         </div>
       </div>
     </div>

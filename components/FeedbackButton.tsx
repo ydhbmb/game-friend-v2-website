@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import Button from '@/components/ui/Button'
 
 export default function FeedbackButton() {
   const [isOpen, setIsOpen] = useState(false)
@@ -10,110 +11,125 @@ export default function FeedbackButton() {
   const [contact, setContact] = useState('')
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState('')
+  const [ok, setOk] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!content.trim()) return setMsg('请填写反馈内容')
-    setLoading(true); setMsg('')
 
-    try {
-      // 1. 将反馈内容存入数据库
-      const { data: { user } } = await supabase.auth.getUser()
-      let userId = null
-      if (user) {
-        const { data: profile } = await supabase.from('users_profile').select('id').eq('auth_id', user.id).single()
-        if (profile) userId = profile.id
-      }
+    setLoading(true)
+    setMsg('')
+    setOk(false)
 
-      await supabase.from('feedbacks').insert({
-        user_id: userId, 
-        type, 
-        content, 
-        contact
-      })
-
-      // 2. 调用后端 API 发送邮件
-      const res = await fetch('/api/feedback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type, content, contact })
-      })
-
-      if (res.ok) {
-        setMsg('提交成功！感谢你的反馈！')
-        setContent(''); setContact('')
-        setTimeout(() => setIsOpen(false), 2000)
-      } else {
-        setMsg('已存入数据库，但邮件发送失败。')
-      }
-    } catch (err) {
-      setMsg('网络异常，请稍后再试')
-    } finally {
-      setLoading(false)
+    const { data: { user } } = await supabase.auth.getUser()
+    let userId: number | null = null
+    if (user) {
+      const { data: profile } = await supabase
+        .from('users_profile')
+        .select('id')
+        .eq('auth_id', user.id)
+        .maybeSingle()
+      if (profile) userId = profile.id
     }
+
+    const { error } = await supabase.from('feedbacks').insert({
+      user_id: userId,
+      type,
+      content: content.trim(),
+      contact: contact.trim(),
+    })
+
+    setLoading(false)
+
+    if (error) {
+      setMsg('提交失败：' + error.message)
+      return
+    }
+
+    setOk(true)
+    setMsg('已收到，感谢反馈')
+    setContent('')
+    setContact('')
+    setTimeout(() => setIsOpen(false), 1800)
   }
 
   return (
     <>
-      {/* 悬浮按钮 */}
-      <button 
+      <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 z-[100] bg-[#0A111F] border border-cyan-500/50 text-cyan-400 p-4 rounded-full shadow-[0_0_20px_rgba(6,182,212,0.3)] hover:scale-110 transition-all font-bold text-sm flex items-center gap-2"
+        className="fixed bottom-6 left-6 z-[100] h-9 px-3.5 rounded-lg bg-[#0A111F] border border-white/[0.1] text-[12px] text-[#94A3B8] hover:text-[#E8EFF7] hover:bg-[#0D1626] transition-colors"
       >
-        💡 建议/报Bug
+        反馈
       </button>
 
-      {/* 弹窗 */}
       {isOpen && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
-          <div className="bg-[#0A111F] border border-cyan-500/50 rounded-2xl p-6 w-full max-w-md shadow-[0_0_50px_rgba(6,182,212,0.2)]">
-            <h3 className="text-xl font-black text-white mb-4 font-orbitron">系统反馈</h3>
-            
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="flex gap-2">
-                {['建议', 'BUG', '举报'].map(t => (
-                  <button 
-                    type="button" 
-                    key={t} 
-                    onClick={() => setType(t)} 
-                    className={`px-4 py-1.5 rounded-lg text-sm font-bold border transition ${type === t ? 'bg-cyan-600 text-white border-cyan-600 shadow-[0_0_10px_rgba(6,182,212,0.3)]' : 'bg-transparent text-gray-400 border-gray-600 hover:border-gray-400'}`}
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+          <div className="w-full max-w-md rounded-xl bg-[#0A111F] border border-white/[0.08] overflow-hidden">
+            <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-white/[0.06]">
+              <h3 className="text-[15px] font-semibold text-[#E8EFF7]">反馈</h3>
+              <button
+                onClick={() => setIsOpen(false)}
+                className="text-[#4A5768] hover:text-[#94A3B8] text-lg leading-none transition-colors"
+              >
+                ×
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit}>
+              <div className="px-5 py-4 space-y-3">
+                <div className="flex gap-2">
+                  {['建议', 'BUG', '举报'].map((t) => (
+                    <button
+                      type="button"
+                      key={t}
+                      onClick={() => setType(t)}
+                      className={`h-8 px-3 rounded-md text-[12px] font-medium border transition-colors ${
+                        type === t
+                          ? 'bg-cyan-500/12 text-cyan-300 border-cyan-500/30'
+                          : 'bg-transparent text-[#5C6B7F] border-white/[0.08] hover:text-[#94A3B8] hover:border-white/[0.14]'
+                      }`}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+
+                <textarea
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  maxLength={500}
+                  placeholder="详细描述你遇到的问题或建议…"
+                  className="w-full h-28 rounded-lg bg-white/[0.03] border border-white/[0.08] px-3 py-2.5 text-[13px] text-[#E8EFF7] placeholder-[#4A5768] outline-none focus:border-cyan-500/50 transition-colors resize-none"
+                />
+
+                <input
+                  value={contact}
+                  onChange={(e) => setContact(e.target.value)}
+                  maxLength={60}
+                  placeholder="联系方式（选填）"
+                  className="w-full h-10 rounded-lg bg-white/[0.03] border border-white/[0.08] px-3 text-[13px] text-[#E8EFF7] placeholder-[#4A5768] outline-none focus:border-cyan-500/50 transition-colors"
+                />
+
+                {msg && (
+                  <p
+                    className={`text-[11.5px] rounded-lg px-3 py-2 border ${
+                      ok
+                        ? 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20'
+                        : 'text-red-400 bg-red-500/10 border-red-500/20'
+                    }`}
                   >
-                    {t}
-                  </button>
-                ))}
+                    {msg}
+                  </p>
+                )}
               </div>
 
-              <textarea 
-                className="w-full bg-[#050B14] border border-cyan-900/50 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-400 h-32 resize-none" 
-                placeholder="请详细描述你遇到的问题或建议..." 
-                value={content} 
-                onChange={(e) => setContent(e.target.value)} 
-              />
-
-              <input 
-                className="w-full bg-[#050B14] border border-cyan-900/50 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-400" 
-                placeholder="你的联系方式 (选填，方便我们联系你)" 
-                value={contact} 
-                onChange={(e) => setContact(e.target.value)} 
-              />
-
-              {msg && <p className={`text-sm text-center font-bold ${msg.includes('成功') ? 'text-green-400' : 'text-red-400'}`}>{msg}</p>}
-
-              <div className="flex gap-3 pt-2">
-                <button 
-                  type="button" 
-                  onClick={() => setIsOpen(false)} 
-                  className="flex-1 bg-gray-800 text-gray-300 py-3 rounded-xl font-bold hover:bg-gray-700 transition"
-                >
+              <div className="px-5 pb-4 pt-1 flex gap-2">
+                <Button variant="ghost" full type="button" onClick={() => setIsOpen(false)}>
                   取消
-                </button>
-                <button 
-                  type="submit" 
-                  disabled={loading} 
-                  className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-black hover:bg-blue-500 disabled:opacity-50 shadow-[0_0_15px_rgba(37,99,235,0.4)] transition"
-                >
-                  {loading ? '发送中...' : '提交反馈'}
-                </button>
+                </Button>
+                <Button variant="primary" full type="submit" loading={loading}>
+                  提交
+                </Button>
               </div>
             </form>
           </div>

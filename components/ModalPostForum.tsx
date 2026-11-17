@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Button from '@/components/ui/Button'
 
 interface Props {
   isOpen: boolean
@@ -15,22 +16,82 @@ export default function ModalPostForum({ isOpen, onClose, onSubmit }: Props) {
 
   if (!isOpen) return null
 
-  const handleSubmit = () => {
-    if (!title.trim() || !content.trim()) return setMsg('请填写标题和内容')
-    onSubmit({ title, content })
+  function reset() {
+    setTitle('')
+    setContent('')
+    setMsg('')
+  }
+
+  function handleSubmit() {
+    if (!title.trim() || !content.trim()) {
+      return setMsg('请填写标题和内容')
+    }
+    onSubmit({ title: title.trim(), content: content.trim() })
+    reset()
   }
 
   return (
-    <div className="fixed inset-0 bg-[#050B14]/90 backdrop-blur-md flex items-center justify-center z-50 p-4">
-      <div className="bg-[#0A111F] border border-fuchsia-500/50 rounded-2xl p-6 md:p-8 w-full max-w-lg shadow-[0_0_30px_rgba(217,70,239,0.2)]">
-        <h3 className="text-xl md:text-2xl font-black mb-6 text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-400 to-purple-500 text-center tracking-widest font-orbitron">发布讨论帖</h3>
-        <input className="w-full bg-[#050B14] border border-gray-700 rounded-lg px-4 py-3 mb-4 text-white outline-none focus:border-fuchsia-500 font-bold" placeholder="帖子标题 (如：求个双排上分攻略)" value={title} onChange={(e) => setTitle(e.target.value)} />
-        <textarea className="w-full bg-[#050B14] border border-gray-700 rounded-lg px-4 py-3 mb-2 text-white outline-none focus:border-fuchsia-500 h-40 resize-none" placeholder="详细内容..." value={content} onChange={(e) => setContent(e.target.value)} />
-        <p className="text-[10px] text-gray-500 mb-4">* 发布即代表您同意《网络通信管理条例》，严禁发布违法违规内容。</p>
-        {msg && <p className="text-red-500 text-sm mb-4 text-center">{msg}</p>}
-        <div className="flex gap-3">
-          <button onClick={onClose} className="flex-1 bg-gray-800 text-gray-300 py-3 rounded-lg font-bold">取消</button>
-          <button onClick={handleSubmit} className="flex-1 bg-fuchsia-600 text-white py-3 rounded-lg font-bold hover:bg-fuchsia-500 shadow-[0_0_15px_rgba(217,70,239,0.4)]">确认发布</button>
+    <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+      <div className="w-full max-w-lg rounded-xl bg-[#0A111F] border border-white/[0.08] overflow-hidden">
+
+        <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-white/[0.06]">
+          <h3 className="text-[15px] font-semibold text-[#E8EFF7]">发布讨论帖</h3>
+          <button
+            onClick={() => { reset(); onClose() }}
+            className="text-[#4A5768] hover:text-[#94A3B8] text-lg leading-none transition-colors"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="px-5 py-4 space-y-3.5">
+          <div>
+            <label className="block text-[11px] text-[#5C6B7F] mb-1.5">
+              标题 <span className="text-red-400/70">*</span>
+            </label>
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              maxLength={60}
+              placeholder="如：双排上分找队友，主玩辅助"
+              className="w-full h-10 rounded-lg bg-white/[0.03] border border-white/[0.08] px-3 text-[13px] text-[#E8EFF7] placeholder-[#4A5768] outline-none focus:border-cyan-500/50 transition-colors"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] text-[#5C6B7F] mb-1.5">
+              内容 <span className="text-red-400/70">*</span>
+            </label>
+            <textarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              maxLength={2000}
+              placeholder="详细说说你的想法…"
+              className="w-full h-40 rounded-lg bg-white/[0.03] border border-white/[0.08] px-3 py-2.5 text-[13px] text-[#E8EFF7] placeholder-[#4A5768] outline-none focus:border-cyan-500/50 transition-colors resize-none"
+            />
+            <p className="text-[10.5px] text-[#4A5768] mt-1 tabular-nums text-right">
+              {content.length} / 2000
+            </p>
+          </div>
+
+          <p className="text-[10.5px] text-[#4A5768] leading-relaxed">
+            发布即表示你同意遵守平台规范，严禁发布违法违规内容。
+          </p>
+
+          {msg && (
+            <p className="text-[11.5px] text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+              {msg}
+            </p>
+          )}
+        </div>
+
+        <div className="px-5 pb-4 pt-1 flex gap-2">
+          <Button variant="ghost" full onClick={() => { reset(); onClose() }}>
+            取消
+          </Button>
+          <Button variant="primary" full onClick={handleSubmit}>
+            发布
+          </Button>
         </div>
       </div>
     </div>
