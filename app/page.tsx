@@ -251,7 +251,7 @@ export default function HomePage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5 md:gap-8">
                   {games.map(game => (
                     <div key={game.id} className="relative group bg-[#0A111F] rounded-2xl border border-gray-800 overflow-hidden hover:border-cyan-400 transition-all duration-500 transform hover:-translate-y-2 hover:shadow-[0_10px_40px_rgba(6,182,212,0.3)]">
-                      <Link href={`/game/${game.id}`} className="block relative z-10">
+                      <Link href={`/game?id=${game.id}`} className="block relative z-10">
                         <div className="h-40 md:h-48 w-full bg-black relative overflow-hidden flex items-center justify-center">
                           {game.cover_url ? (
                             <img src={game.cover_url} alt={game.name} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 group-hover:scale-110 transition duration-700" />
