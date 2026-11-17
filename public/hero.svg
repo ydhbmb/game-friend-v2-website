@@ -1,0 +1,147 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="460" viewBox="0 0 1200 460" role="img" aria-label="僚机雷达 Wingman Radar">
+  <title>僚机雷达 · Wingman Radar</title>
+  <defs>
+    <radialGradient id="bgGlow" cx="880" cy="230" r="420" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#22D3EE" stop-opacity="0.13"/>
+      <stop offset="0.55" stop-color="#22D3EE" stop-opacity="0.035"/>
+      <stop offset="1" stop-color="#22D3EE" stop-opacity="0"/>
+    </radialGradient>
+
+    <linearGradient id="edgeFade" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#04070A" stop-opacity="0"/>
+      <stop offset="0.55" stop-color="#04070A" stop-opacity="0"/>
+      <stop offset="1" stop-color="#04070A" stop-opacity="0.85"/>
+    </linearGradient>
+
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0H0V40" fill="none" stroke="#FFFFFF" stroke-opacity="0.026" stroke-width="1"/>
+    </pattern>
+
+    <radialGradient id="sweepGrad" cx="0" cy="0" r="134" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#22D3EE" stop-opacity="0.30"/>
+      <stop offset="0.45" stop-color="#22D3EE" stop-opacity="0.13"/>
+      <stop offset="1" stop-color="#22D3EE" stop-opacity="0"/>
+    </radialGradient>
+
+    <radialGradient id="coreGlow" cx="0" cy="0" r="70" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#22D3EE" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#22D3EE" stop-opacity="0"/>
+    </radialGradient>
+
+    <linearGradient id="scanGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#B8F5FF" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+
+    <mask id="titleMask" maskUnits="userSpaceOnUse" x="40" y="150" width="560" height="110">
+      <text x="88" y="234" font-family="'Noto Sans CJK SC','Source Han Sans SC',sans-serif"
+            font-size="78" font-weight="900" letter-spacing="-1" fill="#FFFFFF">僚机雷达</text>
+    </mask>
+
+    <clipPath id="heroClip"><rect x="0" y="0" width="1200" height="460"/></clipPath>
+  </defs>
+
+  <style>
+    .sweep   { animation: spin 3.6s linear infinite; transform-origin: 0 0; }
+    .blip    { animation: blip 2.4s ease-out infinite; }
+    .blip2   { animation: blip 2.4s ease-out infinite; animation-delay: .8s; }
+    .blip3   { animation: blip 2.4s ease-out infinite; animation-delay: 1.6s; }
+    .scan    { animation: scan 4.2s ease-in-out infinite; }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    @keyframes blip { 0% { r: 3.2; opacity: .9; } 70% { r: 20; opacity: 0; } 100% { r: 20; opacity: 0; } }
+    @keyframes scan { 0% { transform: translateX(-460px); } 55% { transform: translateX(460px); } 100% { transform: translateX(460px); } }
+    @media (prefers-reduced-motion: reduce) {
+      .sweep, .blip, .blip2, .blip3, .scan { animation: none; }
+    }
+  </style>
+
+  <g clip-path="url(#heroClip)">
+    <!-- base -->
+    <rect width="1200" height="460" fill="#04070A"/>
+    <rect width="1200" height="460" fill="url(#grid)"/>
+    <rect width="1200" height="460" fill="url(#bgGlow)"/>
+    <rect width="1200" height="460" fill="url(#edgeFade)" opacity="0.5"/>
+
+    <!-- ================= RADAR ================= -->
+    <g transform="translate(880,230)">
+      <circle r="70" fill="url(#coreGlow)"/>
+
+      <!-- rings -->
+      <circle r="50"  fill="none" stroke="#22D3EE" stroke-opacity="0.16" stroke-width="1"/>
+      <circle r="92"  fill="none" stroke="#22D3EE" stroke-opacity="0.12" stroke-width="1"/>
+      <circle r="134" fill="none" stroke="#22D3EE" stroke-opacity="0.09" stroke-width="1"/>
+
+      <!-- crosshair -->
+      <path d="M-152 0H152M0 -152V152" stroke="#FFFFFF" stroke-opacity="0.05" stroke-width="1"/>
+      <path d="M-96 -96L96 96M96 -96L-96 96" stroke="#FFFFFF" stroke-opacity="0.028" stroke-width="1"/>
+
+      <!-- outer ticks -->
+      <g stroke="#22D3EE" stroke-opacity="0.30" stroke-width="1">
+        <path d="M0 -152V-142"/>
+        <path d="M76 -131.6V-122.2"/>
+        <path d="M131.6 -76H122.2"/>
+        <path d="M152 0H142"/>
+        <path d="M131.6 76H122.2"/>
+        <path d="M76 131.6V122.2"/>
+        <path d="M0 152V142"/>
+        <path d="M-76 131.6V122.2"/>
+        <path d="M-131.6 76H-122.2"/>
+        <path d="M-152 0H-142"/>
+        <path d="M-131.6 -76H-122.2"/>
+        <path d="M-76 -131.6V-122.2"/>
+      </g>
+
+      <!-- sweep -->
+      <g class="sweep">
+        <path d="M0 0 L0 -134 A134 134 0 0 1 116 -67 Z" fill="url(#sweepGrad)"/>
+        <path d="M0 0 L0 -134" stroke="#5FE8FA" stroke-opacity="0.55" stroke-width="1.2"/>
+      </g>
+
+      <!-- blips -->
+      <g fill="#22D3EE">
+        <circle cx="-58" cy="-40" r="3.2"/>
+        <circle cx="-58" cy="-40" r="3.2" fill="none" stroke="#22D3EE" stroke-width="1" class="blip"/>
+        <circle cx="44" cy="56" r="3.2"/>
+        <circle cx="44" cy="56" r="3.2" fill="none" stroke="#22D3EE" stroke-width="1" class="blip3"/>
+        <circle cx="86" cy="-24" r="2.4" opacity="0.75"/>
+      </g>
+
+      <!-- center -->
+      <circle r="3.4" fill="#EAFBFF"/>
+      <circle r="7" fill="none" stroke="#22D3EE" stroke-opacity="0.5" stroke-width="1"/>
+    </g>
+
+    <!-- ================= TEXT ================= -->
+    <text x="88" y="132" font-family="'Noto Sans CJK SC',sans-serif" font-size="11.5"
+          font-weight="700" letter-spacing="7.5" fill="#22D3EE" opacity="0.92">WINGMAN RADAR</text>
+
+    <text x="88" y="234" font-family="'Noto Sans CJK SC','Source Han Sans SC',sans-serif"
+          font-size="78" font-weight="900" letter-spacing="-1" fill="#F2F6F8">僚机雷达</text>
+
+    <!-- moving light sweep across the title -->
+    <g mask="url(#titleMask)">
+      <rect class="scan" x="40" y="150" width="200" height="110" fill="url(#scanGrad)" opacity="0.55"/>
+    </g>
+
+    <rect x="88" y="258" width="54" height="3" fill="#22D3EE"/>
+
+    <text x="88" y="300" font-family="'Noto Sans CJK SC',sans-serif" font-size="17"
+          font-weight="400" letter-spacing="1.6" fill="#A9B3BA">精准匹配你的神级游戏搭子</text>
+
+    <!-- buttons -->
+    <g>
+      <rect x="88" y="342" width="176" height="50" rx="6" fill="#22D3EE"/>
+      <text x="176" y="373" text-anchor="middle" font-family="'Noto Sans CJK SC',sans-serif"
+            font-size="16" font-weight="700" letter-spacing="1" fill="#03151C">开始匹配</text>
+    </g>
+    <g>
+      <rect x="280" y="342" width="152" height="50" rx="6" fill="none" stroke="#2A3238" stroke-width="1"/>
+      <text x="356" y="373" text-anchor="middle" font-family="'Noto Sans CJK SC',sans-serif"
+            font-size="16" font-weight="500" letter-spacing="1" fill="#C6D0D6">浏览招募</text>
+    </g>
+
+    <!-- baseline -->
+    <path d="M88 430H1112" stroke="#FFFFFF" stroke-opacity="0.05" stroke-width="1"/>
+  </g>
+</svg>

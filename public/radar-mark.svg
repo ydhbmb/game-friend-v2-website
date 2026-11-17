@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="僚机雷达">
+  <title>僚机雷达 图标</title>
+  <defs>
+    <radialGradient id="mg" cx="32" cy="32" r="26" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#22D3EE" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#22D3EE" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="ms" cx="32" cy="32" r="26" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#22D3EE" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#22D3EE" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <style>
+    .k-sweep { animation: k-spin 3.6s linear infinite; transform-origin: 32px 32px; }
+    @keyframes k-spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .k-sweep { animation: none; } }
+  </style>
+  <circle cx="32" cy="32" r="26" fill="url(#mg)"/>
+  <circle cx="32" cy="32" r="10" fill="none" stroke="#22D3EE" stroke-opacity="0.45" stroke-width="1.4"/>
+  <circle cx="32" cy="32" r="18" fill="none" stroke="#22D3EE" stroke-opacity="0.26" stroke-width="1.2"/>
+  <circle cx="32" cy="32" r="26" fill="none" stroke="#22D3EE" stroke-opacity="0.16" stroke-width="1.2"/>
+  <g class="k-sweep">
+    <path d="M32 32 L32 6 A26 26 0 0 1 54.5 19 Z" fill="url(#ms)"/>
+  </g>
+  <circle cx="32" cy="32" r="3.2" fill="#EAFBFF"/>
+  <circle cx="22" cy="24" r="2.1" fill="#22D3EE"/>
+  <circle cx="40" cy="41" r="1.7" fill="#22D3EE" opacity="0.8"/>
+</svg>
